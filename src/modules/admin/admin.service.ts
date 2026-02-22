@@ -14,6 +14,9 @@ import {
   TransactionDocument,
 } from '../transactions/schemas/transaction.schema';
 import { Review, ReviewDocument } from '../reviews/schemas/review.schema';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/schemas/notification.schema';
+import { ChatGateway } from '../conversations/chat.gateway';
 
 @Injectable()
 export class AdminService {
@@ -25,6 +28,8 @@ export class AdminService {
     @InjectModel(Transaction.name)
     private transactionModel: Model<TransactionDocument>,
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
+    private notificationsService: NotificationsService,
+    private chatGateway: ChatGateway,
   ) {}
 
   async getPlatformStats() {
@@ -104,7 +109,15 @@ export class AdminService {
   }
 
   async setUserVerified(id: string, isVerified: boolean) {
-    return this.usersService.setVerified(id, isVerified);
+    const user = await this.usersService.setVerified(id, isVerified);
+    const notif = await this.notificationsService.create(
+      id,
+      NotificationType.VERIFICATION_STATUS,
+      isVerified ? 'Your account has been verified' : 'Your verification status was updated',
+      id,
+    );
+    this.chatGateway.emitNotification(id, notif);
+    return user;
   }
 
   async setSubscriptionStatus(

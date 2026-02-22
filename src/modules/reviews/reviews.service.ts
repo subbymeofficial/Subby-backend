@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -10,15 +11,30 @@ import { Review, ReviewDocument } from './schemas/review.schema';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UsersService } from '../users/users.service';
 import { UserRole } from '../users/schemas/user.schema';
+import { ListingsService } from '../listings/listings.service';
+import { ListingStatus } from '../listings/schemas/listing.schema';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/schemas/notification.schema';
+import { ChatGateway } from '../conversations/chat.gateway';
 
 @Injectable()
 export class ReviewsService {
   constructor(
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
     private usersService: UsersService,
+    private listingsService: ListingsService,
+    private notificationsService: NotificationsService,
+    private chatGateway: ChatGateway,
   ) {}
 
   async create(createReviewDto: CreateReviewDto, reviewerId: string): Promise<ReviewDocument> {
+    const listing = await this.listingsService.findById(createReviewDto.listingId);
+    if (listing.status !== ListingStatus.COMPLETED) {
+      throw new BadRequestException(
+        'You can only review after the job is completed',
+      );
+    }
+
     const existing = await this.reviewModel.findOne({
       reviewerId: new Types.ObjectId(reviewerId),
       listingId: new Types.ObjectId(createReviewDto.listingId),
@@ -37,6 +53,15 @@ export class ReviewsService {
 
     const saved = await review.save();
     await this.recalculateUserRating(createReviewDto.revieweeId);
+
+    const notif = await this.notificationsService.create(
+      createReviewDto.revieweeId,
+      NotificationType.REVIEW_RECEIVED,
+      'You received a new review',
+      saved._id.toString(),
+    );
+    this.chatGateway.emitNotification(createReviewDto.revieweeId, notif);
+
     return saved;
   }
 

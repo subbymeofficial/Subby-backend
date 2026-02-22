@@ -18,6 +18,9 @@ import { ListingsService } from '../listings/listings.service';
 import { UsersService } from '../users/users.service';
 import { UserRole } from '../users/schemas/user.schema';
 import { ListingStatus } from '../listings/schemas/listing.schema';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/schemas/notification.schema';
+import { ChatGateway } from '../conversations/chat.gateway';
 
 @Injectable()
 export class ApplicationsService {
@@ -25,6 +28,8 @@ export class ApplicationsService {
     @InjectModel(Application.name) private applicationModel: Model<ApplicationDocument>,
     private listingsService: ListingsService,
     private usersService: UsersService,
+    private notificationsService: NotificationsService,
+    private chatGateway: ChatGateway,
   ) {}
 
   async create(
@@ -148,6 +153,28 @@ export class ApplicationsService {
       updateDto.status === ApplicationStatus.REJECTED
     ) {
       await this.listingsService.decrementApplicationCount(application.listingId.toString());
+    }
+
+    if (updateDto.status === ApplicationStatus.ACCEPTED) {
+      const contractorId = application.contractorId.toString();
+      const listing = await this.listingsService.findById(application.listingId.toString());
+      const notif = await this.notificationsService.create(
+        contractorId,
+        NotificationType.APPLICATION_ACCEPTED,
+        `Your application for "${listing.title}" was accepted`,
+        id,
+      );
+      this.chatGateway.emitNotification(contractorId, notif);
+    } else if (updateDto.status === ApplicationStatus.REJECTED) {
+      const contractorId = application.contractorId.toString();
+      const listing = await this.listingsService.findById(application.listingId.toString());
+      const notif = await this.notificationsService.create(
+        contractorId,
+        NotificationType.APPLICATION_REJECTED,
+        `Your application for "${listing.title}" was not accepted`,
+        id,
+      );
+      this.chatGateway.emitNotification(contractorId, notif);
     }
 
     return updated as ApplicationDocument;

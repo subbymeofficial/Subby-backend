@@ -46,6 +46,7 @@ async function bootstrap() {
 
   await app.listen(port);
   console.log(`SubbyMe API running on: http://localhost:${port}/${apiPrefix}`);
+  console.log(`Socket.io chat namespace: ws://localhost:${port}/chat`);
 }
 
 bootstrap();

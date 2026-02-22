@@ -12,6 +12,12 @@ export interface JwtPayload {
   exp?: number;
 }
 
+export interface JwtUser {
+  sub: string;
+  email: string;
+  role: string;
+}
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(

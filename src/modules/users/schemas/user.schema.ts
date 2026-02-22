@@ -57,6 +57,12 @@ export class User {
   @Prop({ trim: true, maxlength: 100 })
   trade?: string;
 
+  @Prop({ type: String, trim: true, default: null })
+  tradeId?: string | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  subcategorySlug?: string | null;
+
   @Prop({ min: 0, max: 9999 })
   hourlyRate?: number;
 

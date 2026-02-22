@@ -29,6 +29,12 @@ export class Listing {
   @Prop({ required: true, trim: true, index: true })
   category: string;
 
+  @Prop({ type: String, trim: true, index: true, default: null })
+  tradeId?: string | null;
+
+  @Prop({ type: String, trim: true, index: true, default: null })
+  subcategorySlug?: string | null;
+
   @Prop({ required: true, trim: true, index: true })
   location: string;
 

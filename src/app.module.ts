@@ -12,6 +12,10 @@ import { AdminModule } from './modules/admin/admin.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
+import { ConversationsModule } from './modules/conversations/conversations.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { TradesModule } from './modules/trades/trades.module';
+import { AvailabilityModule } from './modules/availability/availability.module';
 
 @Module({
   imports: [
@@ -57,6 +61,10 @@ import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
     AdminModule,
     PaymentsModule,
     CategoriesModule,
+    ConversationsModule,
+    NotificationsModule,
+    TradesModule,
+    AvailabilityModule,
   ],
 })
 export class AppModule {}

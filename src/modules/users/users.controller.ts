@@ -129,6 +129,7 @@ export class UsersController {
   @Patch('toggle-availability')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CONTRACTOR)
+  /** @deprecated Use /availability/me/add or /availability/me/remove instead */
   toggleAvailability(@CurrentUser() user: JwtUser) {
     return this.usersService.toggleAvailability(user.sub);
   }

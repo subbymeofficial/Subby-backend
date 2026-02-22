@@ -110,6 +110,57 @@ export class CloudinaryService {
     }
   }
 
+  async uploadChatFile(
+    file: Express.Multer.File,
+    folder = 'chat_attachments',
+  ): Promise<{ public_id: string; url: string; fileType: string }> {
+    const allowedMimes = [
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/webp',
+      'image/gif',
+      'application/pdf',
+    ];
+    if (!allowedMimes.includes(file.mimetype)) {
+      throw new BadRequestException(
+        'Invalid file type. Allowed: jpeg, png, webp, gif, pdf.',
+      );
+    }
+
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSize) {
+      throw new BadRequestException('File size must be under 5MB.');
+    }
+
+    const resourceType = file.mimetype === 'application/pdf' ? 'raw' : 'image';
+    // For PDFs use raw; for images use image
+    try {
+      const b64 = file.buffer.toString('base64');
+      const dataUri = `data:${file.mimetype};base64,${b64}`;
+
+      const result: UploadApiResponse = await cloudinary.uploader.upload(
+        dataUri,
+        {
+          folder,
+          resource_type: resourceType,
+          overwrite: true,
+        },
+      );
+
+      return {
+        public_id: result.public_id,
+        url: result.secure_url,
+        fileType: file.mimetype,
+      };
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'File upload failed.';
+      this.logger.error(`Chat file upload failed: ${message}`);
+      throw new BadRequestException(message);
+    }
+  }
+
   async deleteImage(publicId: string): Promise<void> {
     try {
       await cloudinary.uploader.destroy(publicId);

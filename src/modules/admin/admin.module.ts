@@ -7,11 +7,15 @@ import { ListingsModule } from '../listings/listings.module';
 import { Application, ApplicationSchema } from '../applications/schemas/application.schema';
 import { Transaction, TransactionSchema } from '../transactions/schemas/transaction.schema';
 import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { ConversationsModule } from '../conversations/conversations.module';
 
 @Module({
   imports: [
     UsersModule,
     ListingsModule,
+    NotificationsModule,
+    ConversationsModule,
     MongooseModule.forFeature([
       { name: Application.name, schema: ApplicationSchema },
       { name: Transaction.name, schema: TransactionSchema },

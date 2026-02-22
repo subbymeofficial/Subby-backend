@@ -50,7 +50,7 @@ export class Transaction {
   @Prop({ enum: PaymentMethod, default: PaymentMethod.STRIPE })
   paymentMethod: PaymentMethod;
 
-  @Prop({ trim: true, index: true })
+  @Prop({ trim: true })
   stripeSessionId?: string;
 
   @Prop({ trim: true })
