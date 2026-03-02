@@ -7,6 +7,7 @@ import {
   TransactionSchema,
 } from '../transactions/schemas/transaction.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { Listing, ListingSchema } from '../listings/schemas/listing.schema';
 import { PromoCodesModule } from '../promocodes/promocodes.module';
 
 @Module({
@@ -14,6 +15,7 @@ import { PromoCodesModule } from '../promocodes/promocodes.module';
     MongooseModule.forFeature([
       { name: Transaction.name, schema: TransactionSchema },
       { name: User.name, schema: UserSchema },
+      { name: Listing.name, schema: ListingSchema },
     ]),
     PromoCodesModule,
   ],

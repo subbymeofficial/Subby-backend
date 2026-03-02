@@ -10,6 +10,8 @@ import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ConversationsModule } from '../conversations/conversations.module';
 import { PromoCodesModule } from '../promocodes/promocodes.module';
+import { AdminLogModule } from '../admin-log/admin-log.module';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { PromoCodesModule } from '../promocodes/promocodes.module';
     NotificationsModule,
     ConversationsModule,
     PromoCodesModule,
+    AdminLogModule,
+    PaymentsModule,
     MongooseModule.forFeature([
       { name: Application.name, schema: ApplicationSchema },
       { name: Transaction.name, schema: TransactionSchema },

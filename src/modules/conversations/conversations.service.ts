@@ -9,6 +9,8 @@ import { Model, Types } from 'mongoose';
 import { Conversation, ConversationDocument } from './schemas/conversation.schema';
 import { Message, MessageDocument } from './schemas/message.schema';
 import { UserRole } from '../users/schemas/user.schema';
+import { Application, ApplicationDocument } from '../applications/schemas/application.schema';
+import { Listing, ListingDocument } from '../listings/schemas/listing.schema';
 
 @Injectable()
 export class ConversationsService {
@@ -16,6 +18,8 @@ export class ConversationsService {
     @InjectModel(Conversation.name)
     private conversationModel: Model<ConversationDocument>,
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
+    @InjectModel(Application.name) private applicationModel: Model<ApplicationDocument>,
+    @InjectModel(Listing.name) private listingModel: Model<ListingDocument>,
   ) {}
 
   async createOrGet(
@@ -40,6 +44,15 @@ export class ConversationsService {
     let conv = await this.conversationModel.findOne(filter).exec();
     if (conv) return conv;
 
+    // Business rule: messaging is only unlocked once there is at least an
+    // application or accepted job between the two users.
+    const canMessage = await this.userPairHasApplicationOrJob(userId, participantId);
+    if (!canMessage) {
+      throw new ForbiddenException(
+        'Messaging is only available after a job application has been submitted or a job has been accepted between you and this user',
+      );
+    }
+
     conv = await this.conversationModel.create({
       participants,
       jobId: jobId ? new Types.ObjectId(jobId) : null,
@@ -47,6 +60,50 @@ export class ConversationsService {
       lastMessageAt: new Date(),
     });
     return conv;
+  }
+
+  private async userPairHasApplicationOrJob(
+    userId: string,
+    participantId: string,
+  ): Promise<boolean> {
+    const userObjectId = new Types.ObjectId(userId);
+    const participantObjectId = new Types.ObjectId(participantId);
+
+    // Case 1: current user is contractor, other is client
+    const contractorAsUserApp = await this.applicationModel
+      .findOne({ contractorId: userObjectId })
+      .populate<{ listingId: ListingDocument }>('listingId', 'clientId assignedContractorId')
+      .exec();
+    if (
+      contractorAsUserApp &&
+      contractorAsUserApp.listingId &&
+      contractorAsUserApp.listingId.clientId.toString() === participantId
+    ) {
+      return true;
+    }
+
+    // Case 2: participant is contractor, current user is client
+    const contractorAsParticipantApp = await this.applicationModel
+      .findOne({ contractorId: participantObjectId })
+      .populate<{ listingId: ListingDocument }>('listingId', 'clientId assignedContractorId')
+      .exec();
+    if (
+      contractorAsParticipantApp &&
+      contractorAsParticipantApp.listingId &&
+      contractorAsParticipantApp.listingId.clientId.toString() === userId
+    ) {
+      return true;
+    }
+
+    // Fallback: check for any listing where one is client and the other is assigned contractor
+    const directJob = await this.listingModel.findOne({
+      $or: [
+        { clientId: userObjectId, assignedContractorId: participantObjectId },
+        { clientId: participantObjectId, assignedContractorId: userObjectId },
+      ],
+    });
+
+    return !!directJob;
   }
 
   async findByUser(

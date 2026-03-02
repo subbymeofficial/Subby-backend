@@ -2,11 +2,14 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { UsersService } from '../users/users.service';
+import { EmailService } from '../email/email.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { GoogleProfile } from './strategies/google.strategy';
@@ -29,6 +32,7 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private emailService: EmailService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResponse> {
@@ -162,5 +166,108 @@ export class AuthService {
     const userObj = user.toJSON() as Record<string, unknown>;
     userObj['password'] = undefined;
     return userObj as Partial<UserDocument>;
+  }
+
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    const user = await this.usersService.findByEmail(email, false);
+    
+    if (!user) {
+      return { 
+        message: 'If an account exists with this email, a reset link has been sent.' 
+      };
+    }
+
+    if (user.googleId && !user.password) {
+      return { 
+        message: 'If an account exists with this email, a reset link has been sent.' 
+      };
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = await bcrypt.hash(resetToken, 10);
+    const expiryTime = new Date(Date.now() + 30 * 60 * 1000);
+
+    await this.usersService.update(user._id.toString(), {
+      resetPasswordToken: hashedToken,
+      resetPasswordExpiry: expiryTime,
+    } as any);
+
+    try {
+      await this.emailService.sendPasswordResetEmail(email, resetToken);
+    } catch (error) {
+      console.error('Failed to send password reset email:', error);
+      await this.usersService.update(user._id.toString(), {
+        resetPasswordToken: undefined,
+        resetPasswordExpiry: undefined,
+      } as any);
+
+      // Development fallback: log reset link when SMTP fails (e.g. Gmail credentials)
+      const isDev = process.env.NODE_ENV !== 'production';
+      if (isDev) {
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+        const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+        console.log('\n--- DEV: Password reset link (SMTP failed, use this to test) ---');
+        console.log(resetUrl);
+        console.log('--- Copy the link above and open in browser ---\n');
+        // Re-store the token so the link works
+        await this.usersService.update(user._id.toString(), {
+          resetPasswordToken: hashedToken,
+          resetPasswordExpiry: expiryTime,
+        } as any);
+        return { message: 'If an account exists with this email, a reset link has been sent.' };
+      }
+
+      throw new BadRequestException('Failed to send password reset email. Please try again.');
+    }
+
+    return { 
+      message: 'If an account exists with this email, a reset link has been sent.' 
+    };
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    if (!token || !newPassword) {
+      throw new BadRequestException('Token and new password are required');
+    }
+
+    const users = await this.usersService['userModel']
+      .find({ isDeleted: false })
+      .select('+resetPasswordToken +resetPasswordExpiry')
+      .exec();
+
+    let matchedUser: UserDocument | null = null;
+
+    for (const user of users) {
+      if (!user.resetPasswordToken || !user.resetPasswordExpiry) {
+        continue;
+      }
+
+      const isTokenValid = await bcrypt.compare(token, user.resetPasswordToken);
+      
+      if (isTokenValid) {
+        if (new Date() > user.resetPasswordExpiry) {
+          throw new BadRequestException('Password reset token has expired');
+        }
+        matchedUser = user;
+        break;
+      }
+    }
+
+    if (!matchedUser) {
+      throw new BadRequestException('Invalid or expired password reset token');
+    }
+
+    if (matchedUser.googleId && !matchedUser.password) {
+      throw new BadRequestException('Cannot reset password for Google sign-in accounts');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    await this.usersService.update(matchedUser._id.toString(), {
+      password: hashedPassword,
+      resetPasswordToken: undefined,
+      resetPasswordExpiry: undefined,
+    } as any);
+
+    return { message: 'Password has been reset successfully. You can now sign in with your new password.' };
   }
 }

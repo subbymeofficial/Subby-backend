@@ -38,6 +38,13 @@ export class ApplicationsController {
   @Roles(UserRole.CONTRACTOR)
   @HttpCode(HttpStatus.CREATED)
   create(@Body() createApplicationDto: CreateApplicationDto, @CurrentUser() user: JwtUser) {
+    console.log('Creating application:', {
+      listingId: createApplicationDto.listingId,
+      contractorId: user.sub,
+      coverLetter: createApplicationDto.coverLetter?.substring(0, 50),
+      proposedRate: createApplicationDto.proposedRate,
+      proposedTimeline: createApplicationDto.proposedTimeline,
+    });
     return this.applicationsService.create(createApplicationDto, user.sub);
   }
 

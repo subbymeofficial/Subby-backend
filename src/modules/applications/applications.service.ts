@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -24,6 +25,8 @@ import { ChatGateway } from '../conversations/chat.gateway';
 
 @Injectable()
 export class ApplicationsService {
+  private readonly logger = new Logger(ApplicationsService.name);
+
   constructor(
     @InjectModel(Application.name) private applicationModel: Model<ApplicationDocument>,
     private listingsService: ListingsService,
@@ -36,6 +39,16 @@ export class ApplicationsService {
     createApplicationDto: CreateApplicationDto,
     contractorId: string,
   ): Promise<ApplicationDocument> {
+    // Validate ObjectIds early
+    if (!Types.ObjectId.isValid(createApplicationDto.listingId)) {
+      this.logger.error(`Invalid listing ID: ${createApplicationDto.listingId}`);
+      throw new BadRequestException('Invalid listing ID format');
+    }
+    if (!Types.ObjectId.isValid(contractorId)) {
+      this.logger.error(`Invalid contractor ID: ${contractorId}`);
+      throw new BadRequestException('Invalid contractor ID format');
+    }
+
     const contractor = await this.usersService.findById(contractorId);
     const subStatus = contractor.subscriptionStatus;
     if (subStatus !== 'active' && subStatus !== 'trialing') {
@@ -75,6 +88,17 @@ export class ApplicationsService {
 
     const saved = await application.save();
     await this.listingsService.incrementApplicationCount(createApplicationDto.listingId);
+
+    // Notify listing owner (client) about new application
+    const clientId = listing.clientId.toString();
+    const notif = await this.notificationsService.create(
+      clientId,
+      NotificationType.NEW_APPLICATION,
+      `New application for "${listing.title}"`,
+      saved._id.toString(),
+    );
+    this.chatGateway.emitNotification(clientId, notif);
+
     return saved;
   }
 
@@ -87,8 +111,8 @@ export class ApplicationsService {
   }
 
   async findByListing(listingId: string, clientId: string): Promise<ApplicationDocument[]> {
-    const listing = await this.listingsService.findById(listingId);
-    if (listing.clientId.toString() !== clientId) {
+    const ownerId = await this.listingsService.getClientId(listingId);
+    if (ownerId !== clientId) {
       throw new ForbiddenException('You can only view applications for your own listings');
     }
 

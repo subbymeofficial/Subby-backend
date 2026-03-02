@@ -97,6 +97,7 @@ export class PaymentsController {
   @Get('my-transactions')
   @UseGuards(JwtAuthGuard)
   getMyTransactions(@CurrentUser() user: JwtUser) {
+    console.log('Getting transactions for user:', user.sub, 'Role:', user.role);
     return this.paymentsService.getMyTransactions(user.sub);
   }
 
@@ -113,6 +114,13 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard)
   getSubscriptionStatus(@CurrentUser() user: JwtUser) {
     return this.paymentsService.getSubscriptionStatus(user.sub);
+  }
+
+  // ── Verify checkout session (manual activation for test mode) ──
+  @Post('verify-session')
+  @UseGuards(JwtAuthGuard)
+  verifySession(@Body('sessionId') sessionId: string, @CurrentUser() user: JwtUser) {
+    return this.paymentsService.verifyAndActivateSession(sessionId, user.sub);
   }
 
   // ── Stripe Webhook (no auth, verified by signature) ──

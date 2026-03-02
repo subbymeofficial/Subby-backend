@@ -7,8 +7,9 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Review, ReviewDocument } from './schemas/review.schema';
+import { Review, ReviewDocument, ReviewType } from './schemas/review.schema';
 import { CreateReviewDto } from './dto/create-review.dto';
+import { UpdateReviewDto } from './dto/update-review.dto';
 import { UsersService } from '../users/users.service';
 import { UserRole } from '../users/schemas/user.schema';
 import { ListingsService } from '../listings/listings.service';
@@ -27,12 +28,52 @@ export class ReviewsService {
     private chatGateway: ChatGateway,
   ) {}
 
-  async create(createReviewDto: CreateReviewDto, reviewerId: string): Promise<ReviewDocument> {
+  async create(
+    createReviewDto: CreateReviewDto,
+    reviewerId: string,
+    reviewerRole: UserRole,
+  ): Promise<ReviewDocument> {
     const listing = await this.listingsService.findById(createReviewDto.listingId);
-    if (listing.status !== ListingStatus.COMPLETED) {
-      throw new BadRequestException(
-        'You can only review after the job is completed',
+
+    // Ensure job is completed and has an assigned contractor
+    if (listing.status !== ListingStatus.COMPLETED || !listing.assignedContractorId) {
+      throw new ForbiddenException(
+        'You can only review completed jobs with an assigned contractor',
       );
+    }
+
+    const listingClientId = listing.clientId.toString();
+    const listingContractorId = listing.assignedContractorId.toString();
+    const reviewerIdStr = reviewerId.toString();
+    const revieweeIdStr = createReviewDto.revieweeId.toString();
+
+    // Role & relationship validation based on review type
+    if (createReviewDto.type === ReviewType.CLIENT_TO_CONTRACTOR) {
+      if (reviewerRole !== UserRole.CLIENT) {
+        throw new ForbiddenException(
+          'Only clients can leave client_to_contractor reviews',
+        );
+      }
+
+      if (listingClientId !== reviewerIdStr || listingContractorId !== revieweeIdStr) {
+        throw new ForbiddenException(
+          'You can only review the contractor assigned to your completed job',
+        );
+      }
+    } else if (createReviewDto.type === ReviewType.CONTRACTOR_TO_CLIENT) {
+      if (reviewerRole !== UserRole.CONTRACTOR) {
+        throw new ForbiddenException(
+          'Only contractors can leave contractor_to_client reviews',
+        );
+      }
+
+      if (listingContractorId !== reviewerIdStr || listingClientId !== revieweeIdStr) {
+        throw new ForbiddenException(
+          'You can only review the client from your completed job',
+        );
+      }
+    } else {
+      throw new ForbiddenException('Unsupported review type');
     }
 
     const existing = await this.reviewModel.findOne({
@@ -141,6 +182,65 @@ export class ReviewsService {
 
     await this.reviewModel.findByIdAndDelete(id).exec();
     await this.recalculateUserRating(review.revieweeId.toString());
+  }
+
+  async updateReview(
+    id: string,
+    userId: string,
+    userRole: UserRole,
+    body: UpdateReviewDto,
+  ): Promise<ReviewDocument> {
+    const review = await this.reviewModel.findById(id).exec();
+    if (!review) throw new NotFoundException('Review not found');
+
+    const isOwner = review.reviewerId.toString() === userId;
+    if (!isOwner && userRole !== UserRole.ADMIN) {
+      throw new ForbiddenException('You can only edit your own reviews');
+    }
+
+    const createdAt = review.createdAt ?? new Date();
+    const now = new Date();
+    const diffMs = now.getTime() - createdAt.getTime();
+    const editWindowMs = 24 * 60 * 60 * 1000; // 24 hours
+
+    if (diffMs > editWindowMs && userRole !== UserRole.ADMIN) {
+      throw new ForbiddenException('Reviews can only be edited within 24 hours of creation');
+    }
+
+    if (typeof body.rating !== 'undefined') {
+      review.rating = body.rating;
+    }
+    if (typeof body.comment !== 'undefined') {
+      review.comment = body.comment;
+    }
+
+    const saved = await review.save();
+    await this.recalculateUserRating(review.revieweeId.toString());
+    return saved;
+  }
+
+  async flagReview(
+    id: string,
+    userId: string,
+    userRole: UserRole,
+    reason: string,
+  ): Promise<ReviewDocument> {
+    const review = await this.reviewModel.findById(id).exec();
+    if (!review) {
+      throw new NotFoundException('Review not found');
+    }
+
+    const isReviewee = review.revieweeId.toString() === userId;
+    if (!isReviewee && userRole !== UserRole.ADMIN) {
+      throw new ForbiddenException('Only the reviewee or an admin can flag this review');
+    }
+
+    review.isFlagged = true;
+    review.flagReason = reason;
+    review.flaggedBy = new Types.ObjectId(userId);
+    review.flaggedAt = new Date();
+
+    return review.save();
   }
 
   private async recalculateUserRating(userId: string): Promise<void> {

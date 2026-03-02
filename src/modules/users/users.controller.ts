@@ -66,10 +66,21 @@ export class UsersController {
     @Query('location') location?: string,
     @Query('minRating') minRating?: number,
     @Query('isVerified') isVerified?: boolean,
+    @Query('minHourlyRate') minHourlyRate?: number,
+    @Query('maxHourlyRate') maxHourlyRate?: number,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.usersService.findContractors({ trade, location, minRating, isVerified, page, limit });
+    return this.usersService.findContractors({ 
+      trade, 
+      location, 
+      minRating, 
+      isVerified, 
+      minHourlyRate, 
+      maxHourlyRate, 
+      page, 
+      limit 
+    });
   }
 
   // GET /users/:id - Get user by ID (authenticated)
@@ -140,5 +151,12 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   remove(@Param('id', ParseObjectIdPipe) id: Types.ObjectId) {
     return this.usersService.delete(id.toString());
+  }
+
+  @Delete('me')
+  @UseGuards(JwtAuthGuard)
+  async deleteSelf(@CurrentUser() user: JwtUser) {
+    await this.usersService.selfDelete(user.sub);
+    return { message: 'Account deleted successfully' };
   }
 }

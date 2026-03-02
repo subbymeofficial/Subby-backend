@@ -3,15 +3,18 @@ import {
   Get,
   Post,
   Delete,
+  Patch,
   Body,
   Param,
   Query,
   UseGuards,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { ReviewsService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
+import { UpdateReviewDto } from './dto/update-review.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -25,6 +28,10 @@ interface JwtUser {
   role: UserRole;
 }
 
+class FlagReviewDto {
+  reason?: string;
+}
+
 @Controller('reviews')
 export class ReviewsController {
   constructor(private readonly reviewsService: ReviewsService) {}
@@ -34,7 +41,7 @@ export class ReviewsController {
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
   create(@Body() createReviewDto: CreateReviewDto, @CurrentUser() user: JwtUser) {
-    return this.reviewsService.create(createReviewDto, user.sub);
+    return this.reviewsService.create(createReviewDto, user.sub, user.role);
   }
 
   // GET /reviews/user/:userId — Get reviews for a specific user (public)
@@ -67,5 +74,30 @@ export class ReviewsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id', ParseObjectIdPipe) id: Types.ObjectId, @CurrentUser() user: JwtUser) {
     return this.reviewsService.delete(id.toString(), user.sub, user.role);
+  }
+
+  // PATCH /reviews/:id — Reviewer can edit within time window
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  update(
+    @Param('id', ParseObjectIdPipe) id: Types.ObjectId,
+    @Body() body: UpdateReviewDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.reviewsService.updateReview(id.toString(), user.sub, user.role, body);
+  }
+
+  // PATCH /reviews/:id/flag — Reviewee can flag a review
+  @Patch(':id/flag')
+  @UseGuards(JwtAuthGuard)
+  flagReview(
+    @Param('id', ParseObjectIdPipe) id: Types.ObjectId,
+    @Body() body: FlagReviewDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    if (!body || typeof body.reason === 'undefined') {
+      throw new BadRequestException('Flag reason is required');
+    }
+    return this.reviewsService.flagReview(id.toString(), user.sub, user.role, body.reason);
   }
 }

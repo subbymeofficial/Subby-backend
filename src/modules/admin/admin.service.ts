@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { UsersService } from '../users/users.service';
@@ -20,6 +20,8 @@ import { ChatGateway } from '../conversations/chat.gateway';
 import { PromoCodesService } from '../promocodes/promocodes.service';
 import { CreatePromoCodeDto } from '../promocodes/dto/create-promo-code.dto';
 import { UpdatePromoCodeDto } from '../promocodes/dto/update-promo-code.dto';
+import { AdminLogService } from '../admin-log/admin-log.service';
+import { PaymentsService } from '../payments/payments.service';
 
 @Injectable()
 export class AdminService {
@@ -34,6 +36,8 @@ export class AdminService {
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
     private notificationsService: NotificationsService,
     private chatGateway: ChatGateway,
+    private adminLogService: AdminLogService,
+    private paymentsService: PaymentsService,
   ) {}
 
   async getPlatformStats() {
@@ -109,19 +113,21 @@ export class AdminService {
   }
 
   async setUserActive(id: string, isActive: boolean) {
-    return this.usersService.setActive(id, isActive);
+    const user = await this.usersService.setActive(id, isActive);
+    await this.adminLogService.log({
+      adminId: id, // adminId will be set at controller layer via metadata if needed
+      action: isActive ? 'user_activate' : 'user_suspend',
+      targetType: 'user',
+      targetId: id,
+      metadata: { isActive },
+    });
+    return user;
   }
 
   async setUserVerified(id: string, isVerified: boolean) {
-    const user = await this.usersService.setVerified(id, isVerified);
-    const notif = await this.notificationsService.create(
-      id,
-      NotificationType.VERIFICATION_STATUS,
-      isVerified ? 'Your account has been verified' : 'Your verification status was updated',
-      id,
+    throw new ForbiddenException(
+      'Verification status is managed via verification documents and cannot be toggled directly.',
     );
-    this.chatGateway.emitNotification(id, notif);
-    return user;
   }
 
   async setSubscriptionStatus(
@@ -133,7 +139,15 @@ export class AdminService {
   }
 
   async deleteUser(id: string) {
-    return this.usersService.delete(id);
+    // Cancel any Stripe subscriptions before deleting the user
+    await this.paymentsService.cancelUserSubscriptions(id);
+    await this.usersService.delete(id);
+    await this.adminLogService.log({
+      adminId: id,
+      action: 'user_delete',
+      targetType: 'user',
+      targetId: id,
+    });
   }
 
   async getAllListings(query: {
@@ -216,10 +230,36 @@ export class AdminService {
     return { reviews, total, page, limit };
   }
 
+  async getFlaggedReviews(query: { page?: number; limit?: number }) {
+    const { page = 1, limit = 20 } = query;
+    const skip = (page - 1) * limit;
+
+    const [reviews, total] = await Promise.all([
+      this.reviewModel
+        .find({ isFlagged: true })
+        .populate('reviewerId', 'name avatar role')
+        .populate('revieweeId', 'name avatar role')
+        .populate('listingId', 'title')
+        .skip(skip)
+        .limit(limit)
+        .sort({ flaggedAt: -1, createdAt: -1 })
+        .exec(),
+      this.reviewModel.countDocuments({ isFlagged: true }),
+    ]);
+
+    return { reviews, total, page, limit };
+  }
+
   async deleteReview(id: string) {
     const review = await this.reviewModel.findByIdAndDelete(id).exec();
     if (!review) return;
     await this.recalculateUserRating(review.revieweeId.toString());
+    await this.adminLogService.log({
+      adminId: review.revieweeId.toString(),
+      action: 'review_delete',
+      targetType: 'review',
+      targetId: id,
+    });
   }
 
   private async recalculateUserRating(userId: string): Promise<void> {
@@ -248,7 +288,15 @@ export class AdminService {
 
   // ── Promo Codes ──
   async createPromoCode(dto: CreatePromoCodeDto, adminId: string) {
-    return this.promoCodesService.create(dto, adminId);
+    const promo = await this.promoCodesService.create(dto, adminId);
+    await this.adminLogService.log({
+      adminId,
+      action: 'promo_create',
+      targetType: 'promo',
+      targetId: promo._id.toString(),
+      metadata: { code: promo.code },
+    });
+    return promo;
   }
 
   async getPromoCodes(page = 1, limit = 20) {
@@ -260,10 +308,23 @@ export class AdminService {
   }
 
   async updatePromoCode(id: string, dto: UpdatePromoCodeDto) {
-    return this.promoCodesService.update(id, dto);
+    const promo = await this.promoCodesService.update(id, dto);
+    await this.adminLogService.log({
+      adminId: promo.createdBy.toString(),
+      action: 'promo_update',
+      targetType: 'promo',
+      targetId: id,
+    });
+    return promo;
   }
 
   async deletePromoCode(id: string) {
-    return this.promoCodesService.delete(id);
+    await this.promoCodesService.delete(id);
+    await this.adminLogService.log({
+      adminId: '',
+      action: 'promo_delete',
+      targetType: 'promo',
+      targetId: id,
+    });
   }
 }

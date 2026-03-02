@@ -75,6 +75,9 @@ export class User {
   @Prop({ default: true, index: true })
   isActive: boolean;
 
+  @Prop({ default: false, index: true })
+  isDeleted: boolean;
+
   @Prop({ default: 0, min: 0, max: 5 })
   averageRating: number;
 
@@ -101,6 +104,12 @@ export class User {
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
   savedContractors: Types.ObjectId[];
+
+  @Prop({ select: false })
+  resetPasswordToken?: string;
+
+  @Prop({ select: false })
+  resetPasswordExpiry?: Date;
 
   createdAt?: Date;
   updatedAt?: Date;

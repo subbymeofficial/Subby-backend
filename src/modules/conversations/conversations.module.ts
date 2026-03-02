@@ -11,12 +11,16 @@ import { MessagesController } from './messages.controller';
 import { ChatGateway } from './chat.gateway';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { Application, ApplicationSchema } from '../applications/schemas/application.schema';
+import { Listing, ListingSchema } from '../listings/schemas/listing.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Conversation.name, schema: ConversationSchema },
       { name: Message.name, schema: MessageSchema },
+      { name: Application.name, schema: ApplicationSchema },
+      { name: Listing.name, schema: ListingSchema },
     ]),
     CloudinaryModule,
     forwardRef(() => NotificationsModule),

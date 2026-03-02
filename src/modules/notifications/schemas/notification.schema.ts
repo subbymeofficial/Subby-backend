@@ -9,6 +9,8 @@ export enum NotificationType {
   REVIEW_RECEIVED = 'review_received',
   APPLICATION_ACCEPTED = 'application_accepted',
   APPLICATION_REJECTED = 'application_rejected',
+  NEW_APPLICATION = 'new_application',
+  JOB_STATUS_CHANGED = 'job_status_changed',
   SUBSCRIPTION_EXPIRING = 'subscription_expiring',
   VERIFICATION_STATUS = 'verification_status',
 }

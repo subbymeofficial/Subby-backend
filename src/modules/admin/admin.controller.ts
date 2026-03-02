@@ -140,6 +140,14 @@ export class AdminController {
     return this.adminService.getAllReviews({ page, limit });
   }
 
+  @Get('reviews/flagged')
+  getFlaggedReviews(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.adminService.getFlaggedReviews({ page, limit });
+  }
+
   @Delete('reviews/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   deleteReview(@Param('id', ParseObjectIdPipe) id: Types.ObjectId) {

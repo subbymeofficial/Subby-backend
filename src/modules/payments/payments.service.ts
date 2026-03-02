@@ -17,6 +17,7 @@ import {
   PaymentMethod,
 } from '../transactions/schemas/transaction.schema';
 import { User, UserDocument, UserRole } from '../users/schemas/user.schema';
+import { Listing, ListingDocument } from '../listings/schemas/listing.schema';
 import { PromoCodesService } from '../promocodes/promocodes.service';
 
 const PLAN_PRICES: Record<string, { amount: number; name: string; trialDays: number }> = {
@@ -33,6 +34,7 @@ export class PaymentsService {
   constructor(
     @InjectModel(Transaction.name) private txModel: Model<TransactionDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Listing.name) private listingModel: Model<ListingDocument>,
     private config: ConfigService,
     private promoCodesService: PromoCodesService,
   ) {
@@ -123,6 +125,7 @@ export class PaymentsService {
           plan,
           transactionId: tx._id.toString(),
           promoCodeId: appliedPromoCodeId ?? '',
+          trialDays: String(trialDays),
         },
       },
       metadata: {
@@ -131,6 +134,7 @@ export class PaymentsService {
         transactionId: tx._id.toString(),
         type: 'subscription',
         promoCodeId: appliedPromoCodeId ?? '',
+        trialDays: String(trialDays),
       },
       success_url: `${this.frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${this.frontendUrl}/payment/cancel`,
@@ -203,6 +207,26 @@ export class PaymentsService {
       status: { $in: [TransactionStatus.PENDING, TransactionStatus.ESCROW] },
     });
     if (existing) throw new BadRequestException('Payment already exists for this listing');
+
+    const listing = await this.listingModel.findById(listingId).exec();
+    if (!listing) {
+      throw new NotFoundException('Listing not found');
+    }
+
+    if (listing.assignedContractorId?.toString() !== contractorId) {
+      throw new ForbiddenException(
+        'You can only pay the contractor assigned to this job',
+      );
+    }
+
+    if (listing.budget && typeof listing.budget.max === 'number') {
+      const maxBudget = listing.budget.max || listing.budget.min;
+      if (amount > maxBudget) {
+        throw new BadRequestException(
+          'Payment amount cannot exceed the agreed job budget',
+        );
+      }
+    }
 
     const customerId = await this.getOrCreateCustomer(client);
     const amountCents = Math.round(amount * 100);
@@ -332,8 +356,16 @@ export class PaymentsService {
 
       if (type === 'subscription') {
         const plan = meta['plan'] as 'standard' | 'premium';
+        const trialDaysMeta = meta['trialDays'];
+        const trialDays =
+          typeof trialDaysMeta === 'string' ? Number(trialDaysMeta) || 0 : 0;
         const expires = new Date();
-        expires.setDate(expires.getDate() + 7);
+        if (trialDays > 0) {
+          expires.setDate(expires.getDate() + trialDays);
+        } else {
+          // Fallback to 7 days if no explicit trial information is available
+          expires.setDate(expires.getDate() + 7);
+        }
         await this.userModel.findByIdAndUpdate(userId, {
           subscriptionPlan: plan,
           subscriptionStatus: 'active',
@@ -344,7 +376,6 @@ export class PaymentsService {
       if (type === 'qualification_upgrade') {
         await this.userModel.findByIdAndUpdate(userId, {
           hasQualificationUpgrade: true,
-          isVerified: true,
         });
       }
 
@@ -412,12 +443,15 @@ export class PaymentsService {
 
   // ── Queries ──
   async getMyTransactions(userId: string): Promise<TransactionDocument[]> {
-    return this.txModel
+    this.logger.log(`Fetching transactions for user: ${userId}`);
+    const transactions = await this.txModel
       .find({ userId: new Types.ObjectId(userId) })
       .populate('listingId', 'title category')
       .populate('contractorId', 'name trade')
       .sort({ createdAt: -1 })
       .exec();
+    this.logger.log(`Found ${transactions.length} transactions for user ${userId}`);
+    return transactions;
   }
 
   async getEscrowTransactions(listingId: string): Promise<TransactionDocument[]> {
@@ -470,5 +504,46 @@ export class PaymentsService {
       expiresAt: user.subscriptionExpiresAt || null,
       hasQualificationUpgrade: user.hasQualificationUpgrade || false,
     };
+  }
+
+  async verifyAndActivateSession(sessionId: string, userId: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const session = await this.stripe.checkout.sessions.retrieve(sessionId);
+      
+      if (!session || session.payment_status !== 'paid') {
+        return { success: false, message: 'Payment not completed' };
+      }
+
+      const meta = session.metadata || {};
+      const sessionUserId = meta['userId'];
+      
+      if (sessionUserId !== userId) {
+        throw new ForbiddenException('Session does not belong to this user');
+      }
+
+      await this.onCheckoutComplete(session);
+      
+      return { success: true, message: 'Subscription activated successfully' };
+    } catch (error) {
+      this.logger.error(`Error verifying session: ${(error as Error).message}`);
+      throw error;
+    }
+  }
+
+  async cancelUserSubscriptions(userId: string): Promise<void> {
+    const user = await this.userModel.findById(userId);
+    if (!user) return;
+
+    if (user.stripeSubscriptionId) {
+      try {
+        await this.stripe.subscriptions.cancel(user.stripeSubscriptionId);
+      } catch (err) {
+        this.logger.warn(
+          `Failed to cancel Stripe subscription for user ${userId}: ${
+            (err as Error).message
+          }`,
+        );
+      }
+    }
   }
 }

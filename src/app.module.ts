@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -18,6 +20,9 @@ import { TradesModule } from './modules/trades/trades.module';
 import { AvailabilityModule } from './modules/availability/availability.module';
 import { ContactModule } from './modules/contact/contact.module';
 import { PromoCodesModule } from './modules/promocodes/promocodes.module';
+import { VerificationModule } from './modules/verification/verification.module';
+import { DisputesModule } from './modules/disputes/disputes.module';
+import { AdminLogModule } from './modules/admin-log/admin-log.module';
 
 @Module({
   imports: [
@@ -69,6 +74,15 @@ import { PromoCodesModule } from './modules/promocodes/promocodes.module';
     AvailabilityModule,
     ContactModule,
     PromoCodesModule,
+    VerificationModule,
+    DisputesModule,
+    AdminLogModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

@@ -1,15 +1,17 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Category, CategoryDocument } from './schemas/category.schema';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import { Listing } from '../listings/schemas/listing.schema';
 
 @Injectable()
 export class CategoriesService {
   constructor(
     @InjectModel(Category.name) private categoryModel: Model<CategoryDocument>,
+    @InjectModel(Listing.name) private listingModel: Model<Listing>,
     private readonly cloudinaryService: CloudinaryService,
   ) {}
 
@@ -81,6 +83,14 @@ export class CategoriesService {
   async remove(id: string): Promise<void> {
     const cat = await this.categoryModel.findById(id);
     if (!cat) throw new NotFoundException('Category not found');
+
+    // Prevent deleting categories that are in use by listings
+    const inUse = await this.listingModel.exists({ category: cat.name });
+    if (inUse) {
+      throw new BadRequestException(
+        'Cannot delete category while it is used by job listings. Please migrate or update listings first.',
+      );
+    }
 
     if (cat.iconImage?.public_id) {
       await this.cloudinaryService.deleteImage(cat.iconImage.public_id);

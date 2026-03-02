@@ -57,6 +57,18 @@ export class Review {
   })
   type: ReviewType;
 
+  @Prop({ default: false })
+  isFlagged: boolean;
+
+  @Prop({ trim: true, maxlength: 1000 })
+  flagReason?: string;
+
+  @Prop({ type: Types.ObjectId, ref: User.name, default: null })
+  flaggedBy?: Types.ObjectId | null;
+
+  @Prop({ type: Date, default: null })
+  flaggedAt?: Date | null;
+
   createdAt?: Date;
   updatedAt?: Date;
 }

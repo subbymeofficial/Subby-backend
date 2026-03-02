@@ -9,11 +9,19 @@ import { Listing, ListingDocument, ListingStatus } from './schemas/listing.schem
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
 import { UserRole } from '../users/schemas/user.schema';
+import { InjectModel as InjectMongooseModel } from '@nestjs/mongoose';
+import { Application, ApplicationDocument } from '../applications/schemas/application.schema';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/schemas/notification.schema';
+import { ChatGateway } from '../conversations/chat.gateway';
 
 @Injectable()
 export class ListingsService {
   constructor(
     @InjectModel(Listing.name) private listingModel: Model<ListingDocument>,
+    @InjectMongooseModel(Application.name) private applicationModel: Model<ApplicationDocument>,
+    private readonly notificationsService: NotificationsService,
+    private readonly chatGateway: ChatGateway,
   ) {}
 
   async create(createListingDto: CreateListingDto, clientId: string): Promise<ListingDocument> {
@@ -81,6 +89,12 @@ export class ListingsService {
     return listing;
   }
 
+  async getClientId(listingId: string): Promise<string> {
+    const listing = await this.listingModel.findById(listingId).select('clientId').lean().exec();
+    if (!listing) throw new NotFoundException('Listing not found');
+    return (listing.clientId as Types.ObjectId).toString();
+  }
+
   /**
    * Find by ID with access control. Returns 403 if user cannot access.
    */
@@ -136,11 +150,56 @@ export class ListingsService {
       throw new ForbiddenException('You can only update your own listings');
     }
 
+    // Business rule: after a contractor is assigned, clients may only change status,
+    // not edit core listing details. Admins are exempt.
+    if (listing.assignedContractorId && userRole !== UserRole.ADMIN) {
+      const definedFields = Object.entries(updateListingDto).filter(
+        ([, value]) => value !== undefined,
+      );
+      const isStatusOnlyUpdate =
+        definedFields.length === 1 && definedFields[0][0] === 'status';
+
+      if (!isStatusOnlyUpdate) {
+        throw new ForbiddenException(
+          'You can only change job status after a contractor has been assigned',
+        );
+      }
+    }
+
+    const previousStatus = listing.status;
+
     const updated = await this.listingModel
       .findByIdAndUpdate(id, { $set: updateListingDto }, { new: true, runValidators: true })
       .exec();
 
-    return updated as ListingDocument;
+    const updatedListing = updated as ListingDocument;
+
+    // If status changed, notify relevant parties
+    if (updatedListing && updateListingDto.status && previousStatus !== updatedListing.status) {
+      const clientId = updatedListing.clientId.toString();
+      const assignedContractorId = updatedListing.assignedContractorId?.toString();
+      const message = `Job "${updatedListing.title}" status changed from ${previousStatus} to ${updatedListing.status}`;
+
+      const notifForClient = await this.notificationsService.create(
+        clientId,
+        NotificationType.JOB_STATUS_CHANGED,
+        message,
+        updatedListing._id.toString(),
+      );
+      await this.chatGateway.emitNotification(clientId, notifForClient);
+
+      if (assignedContractorId) {
+        const notifForContractor = await this.notificationsService.create(
+          assignedContractorId,
+          NotificationType.JOB_STATUS_CHANGED,
+          message,
+          updatedListing._id.toString(),
+        );
+        await this.chatGateway.emitNotification(assignedContractorId, notifForContractor);
+      }
+    }
+
+    return updatedListing;
   }
 
   async incrementApplicationCount(listingId: string): Promise<void> {
@@ -161,6 +220,9 @@ export class ListingsService {
     if (!isOwner && userRole !== UserRole.ADMIN) {
       throw new ForbiddenException('You can only delete your own listings');
     }
+
+    // Clean up related applications for this listing to avoid orphan records
+    await this.applicationModel.deleteMany({ listingId: new Types.ObjectId(id) }).exec();
 
     await this.listingModel.findByIdAndDelete(id).exec();
   }

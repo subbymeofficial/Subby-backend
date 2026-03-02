@@ -1,7 +1,9 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Trade, TradeDocument } from './schemas/trade.schema';
+import { User } from '../users/schemas/user.schema';
+import { Listing } from '../listings/schemas/listing.schema';
 
 function slugify(text: string): string {
   return text
@@ -16,6 +18,8 @@ function slugify(text: string): string {
 export class TradesService {
   constructor(
     @InjectModel(Trade.name) private tradeModel: Model<TradeDocument>,
+    @InjectModel(User.name) private userModel: Model<User>,
+    @InjectModel(Listing.name) private listingModel: Model<Listing>,
   ) {}
 
   async create(name: string): Promise<TradeDocument> {
@@ -57,6 +61,16 @@ export class TradesService {
   async delete(id: string): Promise<void> {
     const trade = await this.tradeModel.findById(id);
     if (!trade) throw new NotFoundException('Trade not found');
+
+    // Prevent deleting trades that are still referenced by users or listings
+    const inUseByUsers = await this.userModel.exists({ tradeId: id.toString() });
+    const inUseByListings = await this.listingModel.exists({ tradeId: id.toString() });
+    if (inUseByUsers || inUseByListings) {
+      throw new BadRequestException(
+        'Cannot delete trade while it is assigned to users or listings. Please migrate or clear references first.',
+      );
+    }
+
     await this.tradeModel.findByIdAndDelete(id);
   }
 
