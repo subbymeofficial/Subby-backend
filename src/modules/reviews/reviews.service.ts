@@ -42,10 +42,11 @@ export class ReviewsService {
       );
     }
 
-    const listingClientId = listing.clientId.toString();
-    const listingContractorId = listing.assignedContractorId.toString();
-    const reviewerIdStr = reviewerId.toString();
-    const revieweeIdStr = createReviewDto.revieweeId.toString();
+    // Normalize all ids to string ObjectIds to avoid mismatches from populated docs
+    const listingClientId = (listing.clientId as Types.ObjectId).toString();
+    const listingContractorId = (listing.assignedContractorId as Types.ObjectId).toString();
+    const reviewerIdStr = new Types.ObjectId(reviewerId).toString();
+    const revieweeIdStr = new Types.ObjectId(createReviewDto.revieweeId).toString();
 
     // Role & relationship validation based on review type
     if (createReviewDto.type === ReviewType.CLIENT_TO_CONTRACTOR) {
