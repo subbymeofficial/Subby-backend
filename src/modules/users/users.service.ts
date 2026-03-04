@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { MongoServerError } from 'mongodb';
 import * as bcrypt from 'bcryptjs';
 import { User, UserDocument, UserRole } from './schemas/user.schema';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -31,21 +32,29 @@ export class UsersService {
 
   async create(createUserDto: CreateUserDto): Promise<UserDocument> {
     const existing = await this.userModel.findOne({
-      email: createUserDto.email.toLowerCase(),
+      email: createUserDto.email.toLowerCase().trim(),
       isDeleted: false,
     });
     if (existing) {
-      throw new ConflictException('An account with this email already exists');
+      throw new ConflictException('An account with this email already exists. Please sign in or use a different email.');
     }
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, 12);
     const user = new this.userModel({
       ...createUserDto,
+      email: createUserDto.email.toLowerCase().trim(),
       password: hashedPassword,
       role: createUserDto.role || UserRole.CLIENT,
     });
 
-    return user.save();
+    try {
+      return await user.save();
+    } catch (err) {
+      if (err instanceof MongoServerError && err.code === 11000) {
+        throw new ConflictException('An account with this email already exists. Please sign in or use a different email.');
+      }
+      throw err;
+    }
   }
 
   async createOAuthUser(data: {
@@ -228,14 +237,6 @@ export class UsersService {
       await this.cloudinaryService.deleteImage(user.profileImage.public_id);
     }
 
-    await this.userModel
-      .findByIdAndUpdate(
-        id,
-        { isDeleted: true, isActive: false },
-        { new: true },
-      )
-      .exec();
-
     // Basic cleanup: cancel client listings and withdraw contractor applications
     if (user.role === UserRole.CLIENT) {
       await this.listingModel.updateMany(
@@ -263,6 +264,9 @@ export class UsersService {
     for (const revieweeId of affectedRevieweeIds) {
       await this.recalculateUserRatingSafe(revieweeId);
     }
+
+    // Hard delete: remove the user document from the database
+    await this.userModel.findByIdAndDelete(id).exec();
   }
 
   async selfDelete(userId: string): Promise<void> {
