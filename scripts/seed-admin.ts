@@ -9,8 +9,8 @@ import * as path from 'path';
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
-const ADMIN_EMAIL = 'info@subbyme.com';
-const ADMIN_PASSWORD = 'Subbyme123';
+const ADMIN_EMAIL = 'infosubbyme@gmail.com';
+const ADMIN_PASSWORD = 'Admin@123';
 const ADMIN_NAME = 'SubbyMe Admin';
 
 async function seedAdmin() {
