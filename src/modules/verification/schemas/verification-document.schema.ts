@@ -41,6 +41,9 @@ export class VerificationDocument {
   @Prop({ type: String, trim: true, default: null })
   mimeType?: string | null;
 
+  @Prop({ type: Date, default: null })
+  expiryDate?: Date | null;
+
   @Prop({
     type: String,
     required: true,

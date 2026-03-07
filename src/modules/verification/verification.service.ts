@@ -27,6 +27,7 @@ export class VerificationService {
     userId: string,
     type: VerificationDocumentType,
     file: Express.Multer.File,
+    expiryDate: string,
   ): Promise<VerificationDocumentDocument> {
     const upload = await this.cloudinaryService.uploadChatFile(
       file,
@@ -39,6 +40,7 @@ export class VerificationService {
       documentUrl: upload.url,
       mimeType: upload.fileType || null,
       status: VerificationDocumentStatus.PENDING,
+      expiryDate: expiryDate ? new Date(expiryDate) : null,
     });
 
     return doc;

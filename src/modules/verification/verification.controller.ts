@@ -21,7 +21,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../users/schemas/user.schema';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-object-id.pipe';
 import { Types } from 'mongoose';
-import { IsEnum } from 'class-validator';
+import { IsEnum, IsDateString } from 'class-validator';
 import {
   VerificationDocumentType,
 } from './schemas/verification-document.schema';
@@ -35,6 +35,9 @@ interface JwtUser {
 class UploadVerificationDto {
   @IsEnum(VerificationDocumentType)
   type: VerificationDocumentType;
+
+  @IsDateString()
+  expiryDate: string;
 }
 
 @Controller('verification')
@@ -62,8 +65,16 @@ export class VerificationController {
     if (!body?.type) {
       throw new BadRequestException('Verification document type is required');
     }
+    if (!body?.expiryDate) {
+      throw new BadRequestException('Verification document expiry date is required');
+    }
 
-    return this.verificationService.uploadDocument(user.sub, body.type, file);
+    return this.verificationService.uploadDocument(
+      user.sub,
+      body.type,
+      file,
+      body.expiryDate,
+    );
   }
 
   @Get('me')
