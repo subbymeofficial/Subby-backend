@@ -121,10 +121,16 @@ export class AuthController {
 
       const frontendUrl =
         this.configService.get<string>('frontendUrl') || 'http://localhost:8080';
-      const dashboardPath =
+      let dashboardPath =
         result.user.role === UserRole.ADMIN
           ? '/admin'
           : `/dashboard/${result.user.role}`;
+      if (
+        result.user.role === UserRole.CONTRACTOR &&
+        result.isNewUser
+      ) {
+        dashboardPath = '/dashboard/contractor/subscription';
+      }
 
       const redirectUrl = `${frontendUrl}${dashboardPath}?accessToken=${result.tokens.accessToken}&refreshToken=${result.tokens.refreshToken}`;
       res.redirect(redirectUrl);

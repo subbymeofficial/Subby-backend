@@ -24,6 +24,7 @@ export interface AuthTokens {
 export interface AuthResponse {
   user: Partial<UserDocument>;
   tokens: AuthTokens;
+  isNewUser?: boolean;
 }
 
 @Injectable()
@@ -75,6 +76,7 @@ export class AuthService {
     role: UserRole = UserRole.CLIENT,
   ): Promise<AuthResponse> {
     let user = await this.usersService.findByGoogleId(googleProfile.googleId);
+    let isNewUser = false;
 
     if (!user) {
       const existingUser = await this.usersService.findByEmail(googleProfile.email);
@@ -88,10 +90,11 @@ export class AuthService {
         ...googleProfile,
         role,
       });
+      isNewUser = true;
     }
 
     const tokens = this.generateTokens(user);
-    return { user: this.sanitizeUser(user), tokens };
+    return { user: this.sanitizeUser(user), tokens, isNewUser };
   }
 
   async changePassword(
