@@ -131,6 +131,12 @@ export class AuthController {
       ) {
         dashboardPath = '/dashboard/contractor/subscription';
       }
+      if (
+        result.user.role === UserRole.CLIENT &&
+        result.isNewUser
+      ) {
+        dashboardPath = '/dashboard/client/subscription';
+      }
 
       const redirectUrl = `${frontendUrl}${dashboardPath}?accessToken=${result.tokens.accessToken}&refreshToken=${result.tokens.refreshToken}`;
       res.redirect(redirectUrl);

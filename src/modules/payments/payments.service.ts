@@ -23,6 +23,7 @@ import { PromoCodesService } from '../promocodes/promocodes.service';
 const PLAN_PRICES: Record<string, { amount: number; name: string; trialDays: number }> = {
   standard: { amount: 1000, name: 'SubbyMe Standard', trialDays: 14 },
   premium: { amount: 2500, name: 'SubbyMe Premium', trialDays: 14 },
+  client: { amount: 1000, name: 'SubbyMe Client', trialDays: 0 },
 };
 const QUALIFICATION_PRICE = 2000; // $20/week
 
@@ -142,6 +143,64 @@ export class PaymentsService {
 
     await this.txModel.findByIdAndUpdate(tx._id, { stripeSessionId: session.id });
 
+    return { url: session.url! };
+  }
+
+  // ── Client Subscription ($10/week) ──
+  async createClientSubscriptionCheckout(userId: string): Promise<{ url: string }> {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+    if (user.role !== UserRole.CLIENT)
+      throw new ForbiddenException('Only clients can use this subscription');
+
+    const planConfig = PLAN_PRICES['client'];
+    const customerId = await this.getOrCreateCustomer(user);
+
+    const tx = await this.txModel.create({
+      type: TransactionType.SUBSCRIPTION,
+      userId: new Types.ObjectId(userId),
+      amount: planConfig.amount,
+      currency: 'AUD',
+      status: TransactionStatus.PENDING,
+      paymentMethod: PaymentMethod.STRIPE,
+      metadata: { plan: 'client', role: 'client' },
+    });
+
+    const session = await this.stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: 'subscription',
+      line_items: [
+        {
+          price_data: {
+            currency: 'aud',
+            unit_amount: planConfig.amount,
+            recurring: { interval: 'week' },
+            product_data: { name: planConfig.name },
+          },
+          quantity: 1,
+        },
+      ],
+      subscription_data: {
+        trial_period_days: planConfig.trialDays,
+        metadata: {
+          userId,
+          plan: 'client',
+          transactionId: tx._id.toString(),
+          role: 'client',
+        },
+      },
+      metadata: {
+        userId,
+        plan: 'client',
+        transactionId: tx._id.toString(),
+        type: 'subscription',
+        role: 'client',
+      },
+      success_url: `${this.frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${this.frontendUrl}/payment/cancel`,
+    });
+
+    await this.txModel.findByIdAndUpdate(tx._id, { stripeSessionId: session.id });
     return { url: session.url! };
   }
 
@@ -355,7 +414,7 @@ export class PaymentsService {
       if (!userId) return;
 
       if (type === 'subscription') {
-        const plan = meta['plan'] as 'standard' | 'premium';
+        const plan = meta['plan'] as 'standard' | 'premium' | 'client';
         const trialDaysMeta = meta['trialDays'];
         const trialDays =
           typeof trialDaysMeta === 'string' ? Number(trialDaysMeta) || 0 : 0;
@@ -363,7 +422,6 @@ export class PaymentsService {
         if (trialDays > 0) {
           expires.setDate(expires.getDate() + trialDays);
         } else {
-          // Fallback to 7 days if no explicit trial information is available
           expires.setDate(expires.getDate() + 7);
         }
         await this.userModel.findByIdAndUpdate(userId, {

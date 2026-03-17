@@ -63,6 +63,14 @@ export class PaymentsController {
     return this.paymentsService.createQualificationCheckout(user.sub);
   }
 
+  // ── Client subscription ($10/week) ──
+  @Post('create-client-subscription')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT)
+  createClientSubscription(@CurrentUser() user: JwtUser) {
+    return this.paymentsService.createClientSubscriptionCheckout(user.sub);
+  }
+
   // ── Client pays for a job (escrow) ──
   @Post('create-job-payment')
   @UseGuards(JwtAuthGuard, RolesGuard)

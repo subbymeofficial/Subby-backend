@@ -16,6 +16,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/schemas/notification.schema';
 import { ChatGateway } from '../conversations/chat.gateway';
 import { PaymentsService } from '../payments/payments.service';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class ListingsService {
@@ -27,9 +28,22 @@ export class ListingsService {
     private readonly notificationsService: NotificationsService,
     private readonly chatGateway: ChatGateway,
     private readonly paymentsService: PaymentsService,
+    private readonly usersService: UsersService,
   ) {}
 
   async create(createListingDto: CreateListingDto, clientId: string): Promise<ListingDocument> {
+    const user = await this.usersService.findById(clientId);
+    if (!user) throw new NotFoundException('User not found');
+    if (user.role === UserRole.CLIENT) {
+      const hasActiveSubscription =
+        user.subscriptionPlan === 'client' &&
+        (user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing');
+      if (!hasActiveSubscription) {
+        throw new ForbiddenException(
+          'An active client subscription is required to create job listings. Subscribe at Subscription in your dashboard.',
+        );
+      }
+    }
     const listing = new this.listingModel({
       ...createListingDto,
       clientId: new Types.ObjectId(clientId),

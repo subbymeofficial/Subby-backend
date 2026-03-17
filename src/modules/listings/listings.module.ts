@@ -7,9 +7,11 @@ import { Application, ApplicationSchema } from '../applications/schemas/applicat
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ConversationsModule } from '../conversations/conversations.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
+    UsersModule,
     MongooseModule.forFeature([
       { name: Listing.name, schema: ListingSchema },
       { name: Application.name, schema: ApplicationSchema },

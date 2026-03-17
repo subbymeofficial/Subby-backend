@@ -84,7 +84,7 @@ export class User {
   @Prop({ default: 0, min: 0 })
   reviewCount: number;
 
-  @Prop({ type: String, enum: ['standard', 'premium'], default: null })
+  @Prop({ type: String, enum: ['standard', 'premium', 'client'], default: null })
   subscriptionPlan?: string | null;
 
   @Prop({ type: String, enum: ['active', 'trialing', 'past_due', 'cancelled'], default: null })
