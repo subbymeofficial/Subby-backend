@@ -67,8 +67,11 @@ export class PaymentsController {
   @Post('create-client-subscription')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CLIENT)
-  createClientSubscription(@CurrentUser() user: JwtUser) {
-    return this.paymentsService.createClientSubscriptionCheckout(user.sub);
+  createClientSubscription(
+    @CurrentUser() user: JwtUser,
+    @Body('promoCodeId') promoCodeId?: string,
+  ) {
+    return this.paymentsService.createClientSubscriptionCheckout(user.sub, promoCodeId);
   }
 
   // ── Client pays for a job (escrow) ──

@@ -17,6 +17,7 @@ import { UpdatePromoCodeDto } from './dto/update-promo-code.dto';
 const PLAN_PRICES: Record<string, number> = {
   standard: 1000,
   premium: 2500,
+  client: 1000,
 };
 const DEFAULT_TRIAL_DAYS = 14;
 
@@ -115,11 +116,11 @@ export class PromoCodesService {
   }
 
   /**
-   * Server-side validation for contractor subscription. Used before checkout.
+   * Server-side validation for subscription. Used before checkout.
    */
   async validateForSubscription(
     code: string,
-    plan: 'standard' | 'premium',
+    plan: 'standard' | 'premium' | 'client',
   ): Promise<ValidatePromoResult> {
     const originalAmount = PLAN_PRICES[plan] ?? 0;
     if (originalAmount <= 0) {
@@ -205,7 +206,7 @@ export class PromoCodesService {
    */
   async applyForCheckout(
     promoCodeId: string | undefined,
-    plan: 'standard' | 'premium',
+    plan: 'standard' | 'premium' | 'client',
   ): Promise<{ amount: number; extraTrialDays: number; promoCodeId: string } | null> {
     if (!promoCodeId) return null;
 

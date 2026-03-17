@@ -23,7 +23,7 @@ import { PromoCodesService } from '../promocodes/promocodes.service';
 const PLAN_PRICES: Record<string, { amount: number; name: string; trialDays: number }> = {
   standard: { amount: 1000, name: 'SubbyMe Standard', trialDays: 14 },
   premium: { amount: 2500, name: 'SubbyMe Premium', trialDays: 14 },
-  client: { amount: 1000, name: 'SubbyMe Client', trialDays: 0 },
+  client: { amount: 1000, name: 'SubbyMe Client', trialDays: 14 },
 };
 const QUALIFICATION_PRICE = 2000; // $20/week
 
@@ -147,24 +147,46 @@ export class PaymentsService {
   }
 
   // ── Client Subscription ($10/week) ──
-  async createClientSubscriptionCheckout(userId: string): Promise<{ url: string }> {
+  async createClientSubscriptionCheckout(
+    userId: string,
+    promoCodeId?: string,
+  ): Promise<{ url: string }> {
     const user = await this.userModel.findById(userId);
     if (!user) throw new NotFoundException('User not found');
     if (user.role !== UserRole.CLIENT)
       throw new ForbiddenException('Only clients can use this subscription');
 
     const planConfig = PLAN_PRICES['client'];
+    if (!planConfig) throw new BadRequestException('Invalid plan');
+
+    let amount = planConfig.amount;
+    let extraTrialDays = 0;
+    let appliedPromoCodeId: string | null = null;
+
+    if (promoCodeId) {
+      const promoResult = await this.promoCodesService.applyForCheckout(promoCodeId, 'client');
+      if (promoResult) {
+        amount = promoResult.amount;
+        extraTrialDays = promoResult.extraTrialDays;
+        appliedPromoCodeId = promoResult.promoCodeId;
+      }
+    }
+
     const customerId = await this.getOrCreateCustomer(user);
 
     const tx = await this.txModel.create({
       type: TransactionType.SUBSCRIPTION,
       userId: new Types.ObjectId(userId),
-      amount: planConfig.amount,
+      amount,
       currency: 'AUD',
       status: TransactionStatus.PENDING,
       paymentMethod: PaymentMethod.STRIPE,
-      metadata: { plan: 'client', role: 'client' },
+      promoCodeId: appliedPromoCodeId ? new Types.ObjectId(appliedPromoCodeId) : undefined,
+      metadata: { plan: 'client', role: 'client', originalAmount: planConfig.amount },
     });
+
+    const baseTrialDays = user.subscriptionPlan === 'client' ? 0 : planConfig.trialDays;
+    const trialDays = baseTrialDays + extraTrialDays;
 
     const session = await this.stripe.checkout.sessions.create({
       customer: customerId,
@@ -173,7 +195,7 @@ export class PaymentsService {
         {
           price_data: {
             currency: 'aud',
-            unit_amount: planConfig.amount,
+            unit_amount: amount,
             recurring: { interval: 'week' },
             product_data: { name: planConfig.name },
           },
@@ -181,12 +203,14 @@ export class PaymentsService {
         },
       ],
       subscription_data: {
-        trial_period_days: planConfig.trialDays,
+        ...(trialDays > 0 ? { trial_period_days: trialDays } : {}),
         metadata: {
           userId,
           plan: 'client',
           transactionId: tx._id.toString(),
           role: 'client',
+          promoCodeId: appliedPromoCodeId ?? '',
+          trialDays: String(trialDays),
         },
       },
       metadata: {
@@ -195,6 +219,8 @@ export class PaymentsService {
         transactionId: tx._id.toString(),
         type: 'subscription',
         role: 'client',
+        promoCodeId: appliedPromoCodeId ?? '',
+        trialDays: String(trialDays),
       },
       success_url: `${this.frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${this.frontendUrl}/payment/cancel`,
