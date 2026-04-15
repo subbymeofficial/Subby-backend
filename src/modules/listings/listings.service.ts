@@ -34,16 +34,6 @@ export class ListingsService {
   async create(createListingDto: CreateListingDto, clientId: string): Promise<ListingDocument> {
     const user = await this.usersService.findById(clientId);
     if (!user) throw new NotFoundException('User not found');
-    if (user.role === UserRole.CLIENT) {
-      const hasActiveSubscription =
-        user.subscriptionPlan === 'client' &&
-        (user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing');
-      if (!hasActiveSubscription) {
-        throw new ForbiddenException(
-          'An active client subscription is required to create job listings. Subscribe at Subscription in your dashboard.',
-        );
-      }
-    }
     const listing = new this.listingModel({
       ...createListingDto,
       clientId: new Types.ObjectId(clientId),
