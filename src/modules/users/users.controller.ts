@@ -145,6 +145,12 @@ export class UsersController {
     return this.usersService.toggleAvailability(user.sub);
   }
 
+  @Delete('me')
+  @UseGuards(JwtAuthGuard)
+  async deleteSelf(@CurrentUser() user: JwtUser) {
+    await this.usersService.selfDelete(user.sub);
+    return { message: 'Account deleted successfully' };
+  }
   // DELETE /users/:id - Admin only
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -153,10 +159,5 @@ export class UsersController {
     return this.usersService.delete(id.toString());
   }
 
-  @Delete('me')
-  @UseGuards(JwtAuthGuard)
-  async deleteSelf(@CurrentUser() user: JwtUser) {
-    await this.usersService.selfDelete(user.sub);
-    return { message: 'Account deleted successfully' };
-  }
+
 }
