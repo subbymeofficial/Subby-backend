@@ -44,14 +44,6 @@ export class ConversationsService {
     let conv = await this.conversationModel.findOne(filter).exec();
     if (conv) return conv;
 
-    // Business rule: messaging is only unlocked once there is at least an
-    // application or accepted job between the two users.
-    const canMessage = await this.userPairHasApplicationOrJob(userId, participantId);
-    if (!canMessage) {
-      throw new ForbiddenException(
-        'Messaging is only available after a job application has been submitted or a job has been accepted between you and this user',
-      );
-    }
 
     conv = await this.conversationModel.create({
       participants,
