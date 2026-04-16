@@ -2,7 +2,9 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
-  ForbiddenException,
+  ForbiddenException,,
+  forwardRef,
+  Inject,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -19,6 +21,7 @@ import {
   ApplicationStatus,
 } from '../applications/schemas/application.schema';
 import { Review, ReviewDocument } from '../reviews/schemas/review.schema';
+import { PaymentsService } from '../payments/payments.service';
 
 @Injectable()
 export class UsersService {
@@ -28,6 +31,8 @@ export class UsersService {
     @InjectModel(Application.name) private applicationModel: Model<ApplicationDocument>,
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
     private cloudinaryService: CloudinaryService,
+    @Inject(forwardRef(() => PaymentsService))
+    private paymentsService: PaymentsService,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserDocument> {
@@ -412,5 +417,56 @@ export class UsersService {
     const avgRating = result.length > 0 ? result[0].avgRating ?? 0 : 0;
     const count = result.length > 0 ? result[0].count ?? 0 : 0;
     await this.updateRating(userId, avgRating, count);
+  }
+
+  /**
+   * Switch the user's active role. Only allowed between roles they already have.
+   */
+  async switchActiveRole(userId: string, targetRole: UserRole) {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+    const roles: UserRole[] = (user.roles && user.roles.length ? user.roles : [user.role]) as UserRole[];
+    if (!roles.includes(targetRole)) {
+      throw new BadRequestException('You do not have that role yet');
+    }
+    user.activeRole = targetRole;
+    if (!user.roles || !user.roles.length) user.roles = roles;
+    await user.save();
+    return { activeRole: user.activeRole, roles: user.roles };
+  }
+
+  /**
+   * Update the user's availability (for contractors).
+   */
+  async updateAvailability(userId: string, dto: { isAvailable?: boolean; busyDates?: string[] }) {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+    user.availability = {
+      isAvailable: typeof dto.isAvailable === 'boolean' ? dto.isAvailable : (user.availability?.isAvailable ?? false),
+      busyDates: Array.isArray(dto.busyDates) ? dto.busyDates : (user.availability?.busyDates ?? []),
+      updatedAt: new Date(),
+    } as any;
+    await user.save();
+    return user.availability;
+  }
+
+  /**
+   * Start flow to add contractor role to an existing account. Returns a Stripe checkout URL.
+   */
+  async startAddContractorRole(
+    userId: string,
+    body: { successUrl?: string; cancelUrl?: string; plan?: string },
+  ) {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+    const roles: UserRole[] = (user.roles && user.roles.length ? user.roles : [user.role]) as UserRole[];
+    if (roles.includes(UserRole.CONTRACTOR)) {
+      throw new BadRequestException('User already has contractor role');
+    }
+    const session = await this.paymentsService.createAddContractorRoleCheckout(
+      userId,
+      body || {},
+    );
+    return session;
   }
 }

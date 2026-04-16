@@ -39,7 +39,10 @@ export class AuthService {
   async register(registerDto: RegisterDto): Promise<AuthResponse> {
     const user = await this.usersService.create({
       ...registerDto,
-      role: registerDto.role || UserRole.CLIENT,
+      role: (registerDto.roles && registerDto.roles[0]) || registerDto.role || UserRole.CLIENT,
+      roles: registerDto.roles && registerDto.roles.length ? registerDto.roles : [registerDto.role || UserRole.CLIENT],
+      activeRole: (registerDto.roles && registerDto.roles[0]) || registerDto.role || UserRole.CLIENT,
+      availability: { isAvailable: false, busyDates: [] },
     });
 
     const tokens = this.generateTokens(user);
@@ -147,7 +150,9 @@ export class AuthService {
     const payload = {
       sub: user._id.toString(),
       email: user.email,
-      role: user.role,
+      role: user.activeRole || user.role,
+      roles: user.roles && user.roles.length ? user.roles : [user.role],
+      activeRole: user.activeRole || user.role,
     };
 
     const expiresIn = this.configService.get<string>('jwt.expiresIn') || '7d';

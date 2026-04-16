@@ -60,10 +60,10 @@ export class PaymentsService {
         }
       } catch {
         this.logger.warn(
-          `Stale stripeCustomerId for user ${user._id} — clearing and creating new customer`,
+          `Stale stripeCustomerId for user ${user._id} â clearing and creating new customer`,
         );
       }
-      // Customer was deleted or invalid in current Stripe mode — clear stale ID
+      // Customer was deleted or invalid in current Stripe mode â clear stale ID
       await this.userModel.findByIdAndUpdate(user._id, { stripeCustomerId: null });
     }
     const customer = await this.stripe.customers.create({
@@ -75,7 +75,7 @@ export class PaymentsService {
     return customer.id;
   }
 
-  // ── Contractor Subscription ──
+  // ââ Contractor Subscription ââ
   async createSubscriptionCheckout(
     userId: string,
     plan: 'standard' | 'premium',
@@ -156,7 +156,7 @@ export class PaymentsService {
     return { url: session.url! };
   }
 
-  // ── Client Subscription ($10/week) ──
+  // ââ Client Subscription ($10/week) ââ
   async createClientSubscriptionCheckout(
     userId: string,
     promoCodeId?: string,
@@ -240,7 +240,7 @@ export class PaymentsService {
     return { url: session.url! };
   }
 
-  // ── Qualification Upgrade ──
+  // ââ Qualification Upgrade ââ
   async createQualificationCheckout(userId: string): Promise<{ url: string }> {
     const user = await this.userModel.findById(userId);
     if (!user) throw new NotFoundException('User not found');
@@ -287,7 +287,7 @@ export class PaymentsService {
     return { url: session.url! };
   }
 
-  // ── Job Payment (Escrow) ──
+  // ââ Job Payment (Escrow) ââ
   async createJobPayment(
     clientId: string,
     listingId: string,
@@ -348,7 +348,7 @@ export class PaymentsService {
           price_data: {
             currency: 'aud',
             unit_amount: amountCents,
-            product_data: { name: `Job Payment – Listing ${listingId.slice(-6)}` },
+            product_data: { name: `Job Payment â Listing ${listingId.slice(-6)}` },
           },
           quantity: 1,
         },
@@ -378,7 +378,7 @@ export class PaymentsService {
     return { url: session.url! };
   }
 
-  // ── Release Escrow ──
+  // ââ Release Escrow ââ
   async releaseJobPayment(
     transactionId: string,
     userId: string,
@@ -403,7 +403,7 @@ export class PaymentsService {
     return tx.save();
   }
 
-  // ── Webhook Handler ──
+  // ââ Webhook Handler ââ
   async handleWebhook(rawBody: Buffer, signature: string): Promise<void> {
     const webhookSecret = this.config.get<string>('STRIPE_WEBHOOK_SECRET') || '';
     let event: Stripe.Event;
@@ -497,9 +497,25 @@ export class PaymentsService {
         });
       }
     }
-  }
 
-  private async onSubscriptionUpdated(sub: Stripe.Subscription): Promise<void> {
+    if (type === 'add-contractor-role' && userId) {
+      const userDoc = await this.userModel.findById(userId);
+      if (userDoc) {
+        const currentRoles: UserRole[] = Array.isArray(userDoc.roles) && userDoc.roles.length
+          ? (userDoc.roles as UserRole[])
+          : [userDoc.role];
+        const next = Array.from(new Set([...currentRoles, UserRole.CONTRACTOR]));
+        await this.userModel.findByIdAndUpdate(userId, {
+          roles: next,
+          activeRole: UserRole.CONTRACTOR,
+          subscriptionPlan: (session.metadata as any)?.plan || 'contractor_monthly',
+          subscriptionStatus: 'active',
+          stripeSubscriptionId: (session as any).subscription ?? null,
+          stripeCustomerId: (session as any).customer ?? null,
+        });
+      }
+    }
+  }private async onSubscriptionUpdated(sub: Stripe.Subscription): Promise<void> {
     const userId = sub.metadata?.['userId'];
     if (!userId) return;
 
@@ -542,7 +558,65 @@ export class PaymentsService {
     }
   }
 
-  // ── Queries ──
+  /**
+   * Create a Stripe checkout session to add the CONTRACTOR role to an existing user.
+   */
+  async createAddContractorRoleCheckout(
+    userId: string,
+    body: { successUrl?: string; cancelUrl?: string; plan?: string },
+  ): Promise<{ url: string; sessionId: string }> {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+
+    const frontendUrl =
+      this.config.get<string>('FRONTEND_URL') ||
+      this.config.get<string>('CLIENT_URL') ||
+      'https://subbyme.com';
+
+    const plan = body?.plan || 'contractor_monthly';
+    const amount = plan === 'contractor_yearly' ? 49000 : 4900; // cents AUD; fall back if price ids not set
+    const interval = plan === 'contractor_yearly' ? 'year' : 'month';
+
+    const session = await this.stripe.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      customer_email: user.email,
+      line_items: [
+        {
+          price_data: {
+            currency: 'aud',
+            unit_amount: amount,
+            recurring: { interval: interval as 'month' | 'year' },
+            product_data: { name: 'SubbyMe Contractor Subscription' },
+          },
+          quantity: 1,
+        },
+      ],
+      success_url:
+        body?.successUrl ||
+        `${frontendUrl}/dashboard/contractor?upgrade=success`,
+      cancel_url:
+        body?.cancelUrl ||
+        `${frontendUrl}/become-subcontractor?upgrade=cancelled`,
+      metadata: {
+        userId: String(user._id),
+        type: 'add-contractor-role',
+        plan,
+      },
+      subscription_data: {
+        metadata: {
+          userId: String(user._id),
+          type: 'add-contractor-role',
+          plan,
+        },
+      },
+    });
+
+    return { url: session.url as string, sessionId: session.id };
+  }
+
+
+  // ââ Queries ââ
   async getMyTransactions(userId: string): Promise<TransactionDocument[]> {
     this.logger.log(`Fetching transactions for user: ${userId}`);
     const transactions = await this.txModel

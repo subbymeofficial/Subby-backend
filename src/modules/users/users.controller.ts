@@ -160,4 +160,31 @@ export class UsersController {
   }
 
 
+
+  @Post('me/switch-role')
+  @UseGuards(JwtAuthGuard)
+  async switchMyRole(
+    @CurrentUser() user: JwtUser,
+    @Body('role') role: UserRole,
+  ) {
+    return this.usersService.switchActiveRole(user.sub, role);
+  }
+
+  @Post('me/add-contractor-role')
+  @UseGuards(JwtAuthGuard)
+  async addContractorRoleToMe(
+    @CurrentUser() user: JwtUser,
+    @Body() body: { successUrl?: string; cancelUrl?: string; plan?: string },
+  ) {
+    return this.usersService.startAddContractorRole(user.sub, body);
+  }
+
+  @Patch('me/availability')
+  @UseGuards(JwtAuthGuard)
+  async updateMyAvailability(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: { isAvailable?: boolean; busyDates?: string[] },
+  ) {
+    return this.usersService.updateAvailability(user.sub, dto);
+  }
 }

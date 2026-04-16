@@ -1,20 +1,39 @@
 import { PartialType, OmitType } from '@nestjs/mapped-types';
-import { IsOptional, IsString, MaxLength, IsBoolean } from 'class-validator';
+import { IsOptional, IsString, MaxLength, IsBoolean, IsArray, IsEnum, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { CreateUserDto } from './create-user.dto';
+import { UserRole } from '../schemas/user.schema';
+
+export class AvailabilityDto {
+  @IsOptional()
+  @IsBoolean()
+  isAvailable?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  busyDates?: string[];
+}
 
 export class UpdateUserDto extends PartialType(
-  OmitType(CreateUserDto, ['email', 'password', 'role'] as const),
+  OmitType(CreateUserDto, ['email', 'password'] as const),
 ) {
-  @IsString()
   @IsOptional()
-  @MaxLength(1000)
+  @IsString()
+  @MaxLength(500)
   bio?: string;
 
-  @IsString()
   @IsOptional()
-  avatar?: string;
+  @IsArray()
+  @IsEnum(UserRole, { each: true })
+  roles?: UserRole[];
 
-  @IsBoolean()
   @IsOptional()
-  isVerified?: boolean;
+  @IsEnum(UserRole)
+  activeRole?: UserRole;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AvailabilityDto)
+  availability?: AvailabilityDto;
 }

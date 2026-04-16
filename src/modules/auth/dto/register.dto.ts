@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsEmail,
   IsEnum,
   IsNotEmpty,
@@ -23,7 +24,14 @@ export class RegisterDto {
   @MaxLength(128)
   password: string;
 
+  // Legacy single role (kept for backwards compat).
   @IsEnum([UserRole.CLIENT, UserRole.CONTRACTOR])
   @IsOptional()
   role?: UserRole.CLIENT | UserRole.CONTRACTOR;
+
+  // Dual-role: which modes the user is opting into at signup.
+  @IsArray()
+  @IsEnum(UserRole, { each: true })
+  @IsOptional()
+  roles?: UserRole[];
 }
