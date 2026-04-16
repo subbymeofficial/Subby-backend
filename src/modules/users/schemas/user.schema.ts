@@ -35,6 +35,35 @@ export class User {
   })
   role: UserRole;
 
+  @Prop({
+    type: [{ type: String, enum: UserRole }],
+    default: undefined,
+    index: true,
+  })
+  roles?: UserRole[];
+
+  @Prop({
+    type: String,
+    enum: UserRole,
+    default: undefined,
+  })
+  activeRole?: UserRole;
+
+  @Prop({
+    type: {
+      isAvailable: { type: Boolean, default: false },
+      busyDates: { type: [Date], default: [] },
+      updatedAt: { type: Date, default: Date.now },
+    },
+    _id: false,
+    default: () => ({ isAvailable: false, busyDates: [], updatedAt: new Date() }),
+  })
+  availability?: {
+    isAvailable: boolean;
+    busyDates: Date[];
+    updatedAt: Date;
+  };
+
   @Prop({ sparse: true, index: true })
   googleId?: string;
 
