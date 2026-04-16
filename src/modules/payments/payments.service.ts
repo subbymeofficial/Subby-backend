@@ -21,9 +21,9 @@ import { Listing, ListingDocument } from '../listings/schemas/listing.schema';
 import { PromoCodesService } from '../promocodes/promocodes.service';
 
 const PLAN_PRICES: Record<string, { amount: number; name: string; trialDays: number }> = {
-  standard: { amount: 1000, name: 'SubbyMe Standard', trialDays: 14 },
-  premium: { amount: 2500, name: 'SubbyMe Premium', trialDays: 14 },
-  client: { amount: 1000, name: 'SubbyMe Client', trialDays: 14 },
+  standard: { amount: 1000, name: 'SubbyMe Standard', trialDays: 365 },
+  premium: { amount: 2500, name: 'SubbyMe Premium', trialDays: 365 },
+  client: { amount: 1000, name: 'SubbyMe Client', trialDays: 365 },
 };
 const QUALIFICATION_PRICE = 2000; // $20/week
 
