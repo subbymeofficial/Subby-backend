@@ -25,6 +25,7 @@ const PLAN_PRICES: Record<string, { amount: number; name: string; trialDays: num
   premium: { amount: 2500, name: 'SubbyMe Premium', trialDays: 365 },
   client: { amount: 1000, name: 'SubbyMe Client', trialDays: 365 },
 };
+
 const QUALIFICATION_PRICE = 2000; // $20/week
 
 @Injectable()
@@ -51,14 +52,25 @@ export class PaymentsService {
   }
 
   private async getOrCreateCustomer(user: UserDocument): Promise<string> {
-    if (user.stripeCustomerId) return user.stripeCustomerId;
-
+    if (user.stripeCustomerId) {
+      try {
+        const existing = await this.stripe.customers.retrieve(user.stripeCustomerId);
+        if (!(existing as Stripe.DeletedCustomer).deleted) {
+          return user.stripeCustomerId;
+        }
+      } catch {
+        this.logger.warn(
+          `Stale stripeCustomerId for user ${user._id} — clearing and creating new customer`,
+        );
+      }
+      // Customer was deleted or invalid in current Stripe mode — clear stale ID
+      await this.userModel.findByIdAndUpdate(user._id, { stripeCustomerId: null });
+    }
     const customer = await this.stripe.customers.create({
       email: user.email,
       name: user.name,
       metadata: { userId: user._id.toString(), role: user.role },
     });
-
     await this.userModel.findByIdAndUpdate(user._id, { stripeCustomerId: customer.id });
     return customer.id;
   }
@@ -91,7 +103,6 @@ export class PaymentsService {
     }
 
     const customerId = await this.getOrCreateCustomer(user);
-
     const trialDays = user.subscriptionPlan ? 0 : planConfig.trialDays + extraTrialDays;
 
     const tx = await this.txModel.create({
@@ -142,7 +153,6 @@ export class PaymentsService {
     });
 
     await this.txModel.findByIdAndUpdate(tx._id, { stripeSessionId: session.id });
-
     return { url: session.url! };
   }
 
@@ -264,13 +274,16 @@ export class PaymentsService {
           quantity: 1,
         },
       ],
-      metadata: { userId, transactionId: tx._id.toString(), type: 'qualification_upgrade' },
+      metadata: {
+        userId,
+        transactionId: tx._id.toString(),
+        type: 'qualification_upgrade',
+      },
       success_url: `${this.frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${this.frontendUrl}/payment/cancel`,
     });
 
     await this.txModel.findByIdAndUpdate(tx._id, { stripeSessionId: session.id });
-
     return { url: session.url! };
   }
 
@@ -362,7 +375,6 @@ export class PaymentsService {
     });
 
     await this.txModel.findByIdAndUpdate(tx._id, { stripeSessionId: session.id });
-
     return { url: session.url! };
   }
 
@@ -431,7 +443,8 @@ export class PaymentsService {
     if (txId) {
       await this.txModel.findByIdAndUpdate(txId, {
         stripeSessionId: session.id,
-        stripePaymentIntentId: (session as unknown as Record<string, string>)['payment_intent'] ?? null,
+        stripePaymentIntentId:
+          (session as unknown as Record<string, string>)['payment_intent'] ?? null,
       });
     }
 
@@ -444,12 +457,14 @@ export class PaymentsService {
         const trialDaysMeta = meta['trialDays'];
         const trialDays =
           typeof trialDaysMeta === 'string' ? Number(trialDaysMeta) || 0 : 0;
+
         const expires = new Date();
         if (trialDays > 0) {
           expires.setDate(expires.getDate() + trialDays);
         } else {
           expires.setDate(expires.getDate() + 7);
         }
+
         await this.userModel.findByIdAndUpdate(userId, {
           subscriptionPlan: plan,
           subscriptionStatus: 'active',
@@ -476,7 +491,9 @@ export class PaymentsService {
       if (txId) {
         await this.txModel.findByIdAndUpdate(txId, {
           status: TransactionStatus.ESCROW,
-          stripePaymentIntentId: (session as unknown as Record<string, string>)['payment_intent'],
+          stripePaymentIntentId: (session as unknown as Record<string, string>)[
+            'payment_intent'
+          ],
         });
       }
     }
@@ -590,23 +607,23 @@ export class PaymentsService {
     };
   }
 
-  async verifyAndActivateSession(sessionId: string, userId: string): Promise<{ success: boolean; message: string }> {
+  async verifyAndActivateSession(
+    sessionId: string,
+    userId: string,
+  ): Promise<{ success: boolean; message: string }> {
     try {
       const session = await this.stripe.checkout.sessions.retrieve(sessionId);
-      
       if (!session || session.payment_status !== 'paid') {
         return { success: false, message: 'Payment not completed' };
       }
 
       const meta = session.metadata || {};
       const sessionUserId = meta['userId'];
-      
       if (sessionUserId !== userId) {
         throw new ForbiddenException('Session does not belong to this user');
       }
 
       await this.onCheckoutComplete(session);
-      
       return { success: true, message: 'Subscription activated successfully' };
     } catch (error) {
       this.logger.error(`Error verifying session: ${(error as Error).message}`);
