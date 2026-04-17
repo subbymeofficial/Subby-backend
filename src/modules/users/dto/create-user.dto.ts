@@ -40,6 +40,9 @@ export class CreateUserDto {
   @IsOptional()
   activeRole?: UserRole;
 
+  @IsOptional()
+  availability?: { isAvailable?: boolean; busyDates?: (Date | string)[] };
+
   @IsString()
   @IsOptional()
   @MaxLength(20)
