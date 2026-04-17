@@ -498,6 +498,7 @@ export class PaymentsService {
       }
     }
 
+    const userId = meta['userId'];
     if (type === 'add-contractor-role' && userId) {
       const userDoc = await this.userModel.findById(userId);
       if (userDoc) {
