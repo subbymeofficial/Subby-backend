@@ -1,5 +1,13 @@
 import { PartialType, OmitType } from '@nestjs/mapped-types';
-import { IsOptional, IsString, MaxLength, IsBoolean, IsArray, IsEnum, ValidateNested } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  MaxLength,
+  IsBoolean,
+  IsArray,
+  IsEnum,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreateUserDto } from './create-user.dto';
 import { UserRole } from '../schemas/user.schema';
@@ -31,6 +39,10 @@ export class UpdateUserDto extends PartialType(
   @IsOptional()
   @IsEnum(UserRole)
   activeRole?: UserRole;
+
+  @IsOptional()
+  @IsBoolean()
+  isVerified?: boolean;
 
   @IsOptional()
   @ValidateNested()
