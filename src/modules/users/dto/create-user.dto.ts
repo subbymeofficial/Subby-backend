@@ -36,6 +36,10 @@ export class CreateUserDto {
   @IsOptional()
   roles?: UserRole[];
 
+  @IsEnum(UserRole)
+  @IsOptional()
+  activeRole?: UserRole;
+
   @IsString()
   @IsOptional()
   @MaxLength(20)
