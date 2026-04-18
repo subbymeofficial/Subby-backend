@@ -209,4 +209,13 @@ export class AdminController {
   deletePromoCode(@Param('id', ParseObjectIdPipe) id: Types.ObjectId) {
     return this.adminService.deletePromoCode(id.toString());
   }
+
+  // ── Maintenance ──
+  // POST /admin/maintenance/zero-trial-subscriptions
+  // One-time cleanup of legacy subscription transactions that were recorded
+  // at the plan price even though the user is on a free trial.
+  @Post('maintenance/zero-trial-subscriptions')
+  zeroTrialSubscriptions() {
+    return this.adminService.zeroOutUnchargedSubscriptionTransactions();
+  }
 }
