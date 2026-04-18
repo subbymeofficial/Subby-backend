@@ -46,7 +46,7 @@ export class AuthService {
     });
     // Fire-and-forget welcome email
     this.emailService
-      .sendWelcomeEmail(user.email, user.firstName)
+      .sendWelcomeEmail(user.email, user.name?.split(' ')[0])
       .catch((err) =>
         console.error('[AuthService.register] welcome email failed:', err),
       );
@@ -103,7 +103,7 @@ export class AuthService {
       isNewUser = true;
       // Fire-and-forget welcome email for new OAuth users
       this.emailService
-        .sendWelcomeEmail(user.email, user.firstName)
+        .sendWelcomeEmail(user.email, user.name?.split(' ')[0])
         .catch((err) =>
           console.error('[AuthService.googleAuth] welcome email failed:', err),
         );
