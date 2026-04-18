@@ -6,6 +6,7 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { runWelcomeBackfill } from './scripts/backfill-welcome';
+import { runFixMitchRole } from './scripts/fix-mitch-role';
 import { setDefaultResultOrder } from 'dns';
 
 // Railway's egress has no IPv6 route; prefer IPv4 so Gmail SMTP
@@ -53,6 +54,12 @@ async function bootstrap() {
   if (process.env.RUN_WELCOME_BACKFILL === 'true') {
     runWelcomeBackfill(app).catch((err) =>
       console.error('[WelcomeBackfill] failed:', err),
+    );
+  }
+
+  if (process.env.RUN_FIX_MITCH_ROLE === 'true') {
+    runFixMitchRole(app).catch((err) =>
+      console.error('[FixMitchRole] failed:', err),
     );
   }
 
