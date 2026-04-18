@@ -122,4 +122,92 @@ This is an automated email. Please do not reply to this message.
       throw new Error('Failed to send password reset email');
     }
   }
+
+  async sendWelcomeEmail(to: string, firstName?: string): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('frontendUrl') || 'https://subbyme.com';
+    const fromAddress =
+      this.configService.get<string>('email.from') ||
+      this.configService.get<string>('email.user');
+    const name = (firstName || '').trim() || 'there';
+    const dashboardUrl = `${frontendUrl}/dashboard`;
+
+    const html = `
+<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#111;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:24px 0;">
+      <tr><td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.06);">
+          <tr><td style="background:#1d4ed8;color:#ffffff;padding:28px 32px;">
+            <div style="font-size:22px;font-weight:700;letter-spacing:0.3px;">SubbyMe</div>
+          </td></tr>
+          <tr><td style="padding:28px 32px 8px 32px;">
+            <h1 style="margin:0 0 12px 0;font-size:22px;line-height:1.3;">Hey ${name}, welcome to SubbyMe</h1>
+            <p style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#333;">Thanks for signing up &mdash; stoked to have you on board. Your profile is the first thing builders and head contractors see when they are hunting tradies, so the 5 minutes you spend getting it right pays off every week.</p>
+            <p style="margin:0 0 8px 0;font-size:15px;line-height:1.55;color:#333;"><strong>Here is what makes a profile stand out:</strong></p>
+            <ol style="margin:0 0 20px 20px;padding:0;font-size:15px;line-height:1.7;color:#333;">
+              <li><strong>Finish every section.</strong> Builders literally filter incomplete profiles out before they look &mdash; half-finished = invisible.</li>
+              <li><strong>Upload your licences, tickets and insurance.</strong> Verified tradies always show up first in search results.</li>
+              <li><strong>Add your ABN.</strong> Most legit builders will not hire without it.</li>
+              <li><strong>Pick 3-5 trades you are genuinely strong in</strong> &mdash; depth beats breadth.</li>
+              <li><strong>Write a short bio.</strong> A few lines on your experience, the jobs you love, and why a builder should pick you.</li>
+              <li><strong>Add photos of past work.</strong> Before/after shots and finished jobs build trust faster than anything else on the platform &mdash; this is the single biggest lever.</li>
+              <li><strong>Mark your availability and service area</strong> so you only get pinged for jobs that actually fit.</li>
+            </ol>
+            <p style="margin:0 0 24px 0;font-size:14px;line-height:1.55;color:#555;">Complete, verified profiles get up to <strong>5x more enquiries</strong> than empty ones.</p>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 8px 0;">
+              <tr><td style="background:#1d4ed8;border-radius:8px;">
+                <a href="${dashboardUrl}" style="display:inline-block;padding:14px 26px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;">Complete my profile &rarr;</a>
+              </td></tr>
+            </table>
+            <p style="margin:20px 0 0 0;font-size:14px;line-height:1.55;color:#555;">Got questions? Just hit reply &mdash; this inbox comes straight to us.</p>
+            <p style="margin:14px 0 0 0;font-size:14px;line-height:1.55;color:#333;">Cheers,<br/>The SubbyMe team</p>
+          </td></tr>
+          <tr><td style="padding:20px 32px 28px 32px;border-top:1px solid #eee;font-size:12px;color:#888;line-height:1.55;">
+            You are receiving this because you signed up at subbyme.com. If this was not you, just reply and we will sort it.
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`;
+
+    const text = [
+      `Hey ${name}, welcome to SubbyMe.`,
+      '',
+      'Thanks for signing up. Your profile is the first thing builders see -- spend 5 minutes getting it right and it pays off every week.',
+      '',
+      'Tips to stand out:',
+      '1. Finish every section -- half-finished profiles are invisible.',
+      '2. Upload your licences, tickets and insurance.',
+      '3. Add your ABN.',
+      '4. Pick 3-5 trades you are genuinely strong in.',
+      '5. Write a short bio.',
+      '6. Add photos of past work -- the biggest trust lever on the platform.',
+      '7. Mark your availability and service area.',
+      '',
+      'Complete profiles get up to 5x more enquiries than empty ones.',
+      '',
+      `Complete your profile: ${dashboardUrl}`,
+      '',
+      'Questions? Just hit reply.',
+      '',
+      'Cheers,',
+      'The SubbyMe team',
+    ].join('\n');
+
+    try {
+      await this.transporter.sendMail({
+        from: fromAddress,
+        to,
+        subject: "Welcome to SubbyMe -- let's get your profile jobs-ready",
+        html,
+        text,
+      });
+    } catch (err) {
+      // Don't block signup if welcome email fails
+      console.error('[EmailService] sendWelcomeEmail failed:', err);
+    }
+  }
 }
