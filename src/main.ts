@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { runWelcomeBackfill } from './scripts/backfill-welcome';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
@@ -43,6 +44,10 @@ async function bootstrap() {
 
   // Global response interceptor
   app.useGlobalInterceptors(new TransformInterceptor());
+
+  if (process.env.RUN_WELCOME_BACKFILL === 'true') {
+    await runWelcomeBackfill(app);
+  }
 
   await app.listen(port);
   console.log(`SubbyMe API running on: http://localhost:${port}/${apiPrefix}`);
