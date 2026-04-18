@@ -104,11 +104,14 @@ export class PaymentsService {
 
     const customerId = await this.getOrCreateCustomer(user);
     const trialDays = user.subscriptionPlan ? 0 : planConfig.trialDays + extraTrialDays;
+    // During a free trial no money is charged yet; record the audit row with amount: 0
+    // so the admin revenue totals only reflect money actually collected.
+    const subscriptionTxAmount = trialDays > 0 ? 0 : amount;
 
     const tx = await this.txModel.create({
       type: TransactionType.SUBSCRIPTION,
       userId: new Types.ObjectId(userId),
-      amount,
+      amount: subscriptionTxAmount,
       currency: 'AUD',
       status: TransactionStatus.PENDING,
       paymentMethod: PaymentMethod.STRIPE,
