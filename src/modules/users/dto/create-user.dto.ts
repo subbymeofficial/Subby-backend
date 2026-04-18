@@ -10,8 +10,27 @@ import {
   Min,
   Max,
   IsArray,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { UserRole } from '../schemas/user.schema';
+
+export class TicketDto {
+  @IsString()
+  @IsOptional()
+  @MaxLength(120)
+  name?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(40)
+  expiry?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(5_000_000)
+  photoDataUrl?: string;
+}
 
 export class CreateUserDto {
   @IsString()
@@ -58,6 +77,42 @@ export class CreateUserDto {
   @MaxLength(100)
   trade?: string;
 
+  @IsString()
+  @IsOptional()
+  @MaxLength(100)
+  tradeId?: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  trades?: string[];
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(32)
+  abn?: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TicketDto)
+  @IsOptional()
+  tickets?: TicketDto[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  insurance?: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  availableDays?: string[];
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(8)
+  market?: string;
+
   @IsNumber()
   @Min(0)
   @Max(9999)
@@ -69,3 +124,4 @@ export class CreateUserDto {
   @IsOptional()
   skills?: string[];
 }
+
