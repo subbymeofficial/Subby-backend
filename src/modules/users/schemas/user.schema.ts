@@ -98,6 +98,32 @@ export class User {
   @Prop({ type: [String], default: [] })
   skills: string[];
 
+  @Prop({ type: [String], default: [] })
+  trades: string[];
+
+  @Prop({ trim: true, maxlength: 32, default: '' })
+  abn?: string;
+
+  @Prop({
+    type: [{
+      name: { type: String, trim: true, maxlength: 120 },
+      expiry: { type: String, trim: true, maxlength: 40 },
+      photoDataUrl: { type: String },
+    }],
+    default: [],
+    _id: false,
+  })
+  tickets: Array<{ name?: string; expiry?: string; photoDataUrl?: string }>;
+
+  @Prop({ type: [String], default: [] })
+  insurance: string[];
+
+  @Prop({ type: [String], default: [] })
+  availableDays: string[];
+
+  @Prop({ type: String, trim: true, default: '' })
+  market?: string;
+
   @Prop({ default: false })
   isVerified: boolean;
 
