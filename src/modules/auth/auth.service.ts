@@ -44,6 +44,13 @@ export class AuthService {
       activeRole: (registerDto.roles && registerDto.roles[0]) || registerDto.role || UserRole.CLIENT,
       availability: { isAvailable: false, busyDates: [] },
     });
+    // Fire-and-forget welcome email
+    this.emailService
+      .sendWelcomeEmail(user.email, user.firstName)
+      .catch((err) =>
+        console.error('[AuthService.register] welcome email failed:', err),
+      );
+
 
     const tokens = this.generateTokens(user);
     return { user: this.sanitizeUser(user), tokens };
@@ -94,6 +101,12 @@ export class AuthService {
         role,
       });
       isNewUser = true;
+      // Fire-and-forget welcome email for new OAuth users
+      this.emailService
+        .sendWelcomeEmail(user.email, user.firstName)
+        .catch((err) =>
+          console.error('[AuthService.googleAuth] welcome email failed:', err),
+        );
     }
 
     const tokens = this.generateTokens(user);
