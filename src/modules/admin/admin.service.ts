@@ -356,4 +356,27 @@ export class AdminService {
       targetId: id,
     });
   }
+
+  // ── Maintenance ──
+  // One-time cleanup: zero the amount on subscription transactions that never
+  // actually collected money (no Stripe payment intent). Safe to run multiple
+  // times; a real paid subscription will have a stripePaymentIntentId and is
+  // left alone.
+  async zeroOutUnchargedSubscriptionTransactions() {
+    const result = await this.transactionModel.updateMany(
+      {
+        type: 'subscription',
+        amount: { $gt: 0 },
+        $or: [
+          { stripePaymentIntentId: null },
+          { stripePaymentIntentId: { $exists: false } },
+        ],
+      },
+      { $set: { amount: 0 } },
+    ).exec();
+    return {
+      matched: result.matchedCount,
+      modified: result.modifiedCount,
+    };
+  }
 }
