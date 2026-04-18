@@ -6,6 +6,11 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { runWelcomeBackfill } from './scripts/backfill-welcome';
+import { setDefaultResultOrder } from 'dns';
+
+// Railway's egress has no IPv6 route; prefer IPv4 so Gmail SMTP
+// connects immediately instead of hanging on IPv6 timeouts.
+setDefaultResultOrder('ipv4first');
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
@@ -46,7 +51,9 @@ async function bootstrap() {
   app.useGlobalInterceptors(new TransformInterceptor());
 
   if (process.env.RUN_WELCOME_BACKFILL === 'true') {
-    await runWelcomeBackfill(app);
+    runWelcomeBackfill(app).catch((err) =>
+      console.error('[WelcomeBackfill] failed:', err),
+    );
   }
 
   await app.listen(port);
